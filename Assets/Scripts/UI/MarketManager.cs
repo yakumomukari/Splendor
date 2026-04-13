@@ -63,12 +63,8 @@ public class MarketManager : MonoBehaviour
             // 调用核心算法类进行校验
             bool canAfford = GameRules.CanAffordCard(playerTokens, playerDiscounts, playerGold, cardCosts, out int goldNeeded);
             
-            // 获取 Button 组件控制交互
-            Button btn = cardUI.GetComponent<Button>();
-            if (btn != null)
-            {
-                btn.interactable = canAfford;
-            }
+            // 更新卡牌的可交互状态与视觉表现
+            cardUI.SetState(canAfford);
         }
     }
 

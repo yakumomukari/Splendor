@@ -1,7 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
 
-public enum GemType { Emerald, Sapphire, Ruby, Diamond, Onyx, Gold }
 
 public class BankManager : NetworkBehaviour
 {

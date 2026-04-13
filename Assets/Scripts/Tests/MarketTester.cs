@@ -5,6 +5,7 @@ public class LocalUIDriver : MonoBehaviour
 {
     [Header("依赖绑定")]
     public MarketManager marketManager;
+    public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
     
     [Header("测试数据源")]
     public List<CardSO> testDeck; // 请在 Inspector 中随意拖入 15-20 张卡牌 SO
@@ -15,6 +16,7 @@ public class LocalUIDriver : MonoBehaviour
     private int[] playerTokens = new int[5];
     private int[] playerDiscounts = new int[5];
     private int playerGold = 0;
+    private int playerScore = 0;
 
     private void Start()
     {
@@ -28,6 +30,7 @@ public class LocalUIDriver : MonoBehaviour
         GameEvents.OnBuyCardReq += HandleBuyCardRequest;
 
         RefreshMarket();
+        RefreshPlayerPanel();
         PrintCurrentAssets();
     }
 
@@ -57,6 +60,7 @@ public class LocalUIDriver : MonoBehaviour
             playerTokens = new int[5];
             playerGold = 0;
             playerDiscounts = new int[5];
+            playerScore = 0;
             dataChanged = true;
         }
 
@@ -64,6 +68,7 @@ public class LocalUIDriver : MonoBehaviour
         {
             PrintCurrentAssets();
             RefreshMarket();
+            RefreshPlayerPanel();
         }
     }
 
@@ -107,8 +112,11 @@ public class LocalUIDriver : MonoBehaviour
                 {
                     playerDiscounts[(int)targetCard.bonusGem]++;
                 }
+                
+                // 增加玩家分数
+                playerScore += targetCard.points;
 
-                Debug.Log($"[系统模拟] 购买成功！获得了卡牌 {cardId}，永久折扣+1");
+                Debug.Log($"[系统模拟] 购买成功！获得了卡牌 {cardId}，永久折扣+1, 威望分+{targetCard.points}");
             }
             else
             {
@@ -135,11 +143,20 @@ public class LocalUIDriver : MonoBehaviour
         // 交易完成后再次刷新 UI 与 输出
         PrintCurrentAssets();
         RefreshMarket();
+        RefreshPlayerPanel();
+    }
+
+    private void RefreshPlayerPanel()
+    {
+        if (playerPanel != null)
+        {
+            playerPanel.UpdatePlayerUI(playerTokens, playerDiscounts, playerGold, playerScore);
+        }
     }
 
     private void PrintCurrentAssets()
     {
-        Debug.Log($"当前模拟资产 -> 白:{playerTokens[0]} 蓝:{playerTokens[1]} 绿:{playerTokens[2]} 红:{playerTokens[3]} 黑:{playerTokens[4]} 金:{playerGold} | 当前折扣总数: {GetTotalDiscounts()}");
+        Debug.Log($"当前模拟资产 -> 白:{playerTokens[0]} 蓝:{playerTokens[1]} 绿:{playerTokens[2]} 红:{playerTokens[3]} 黑:{playerTokens[4]} 金:{playerGold} | 当前折扣总数: {GetTotalDiscounts()} | 分数: {playerScore}");
     }
 
     private int GetTotalDiscounts()

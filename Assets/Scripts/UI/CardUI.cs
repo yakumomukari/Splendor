@@ -7,6 +7,7 @@ public class CardUI : MonoBehaviour
     [Header("UI Elements")]
     public TextMeshProUGUI pointsText;         // 威望分数文本
     public TextMeshProUGUI bonusGemText;       // 奖励宝石类型的表现（实际开发中可能是 Image）
+    public GameObject lockOverlay;             // 半透明遮罩层
     
     [Header("Cost UI Elements")]
     public TextMeshProUGUI costWhiteText;      // 可以根据实际情况考虑用数组结构
@@ -60,6 +61,23 @@ public class CardUI : MonoBehaviour
         {
             // 费用为0时隐藏该UI
             uiText.gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// 更新交互与遮罩状态
+    /// </summary>
+    public void SetState(bool canAfford)
+    {
+        Button btn = GetComponent<Button>();
+        if (btn != null)
+        {
+            btn.interactable = canAfford;
+        }
+
+        if (lockOverlay != null)
+        {
+            lockOverlay.SetActive(!canAfford);
         }
     }
 

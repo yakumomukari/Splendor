@@ -39,4 +39,16 @@ public static class GameEvents
     // 注意：玩家分数、资产的刷新不需要写在这，直接用 NGO 的 NetworkVariable.OnValueChanged
     // 这里只管瞬时的无状态事件，比如弹出警告
     public static Action<string> OnShowWarningMsg; // 例如："这不是你的回合" 或 "代币不足"
+
+    // ==========================================
+    // 🟢 新增：服务器内部解耦广播 (服务器发送 -> 服务器接收)
+    // ==========================================
+    
+    // 当银行成功扣款后广播。
+    // 参数1：拿钱的玩家 ID (ulong)；参数2：拿取的各颜色数量 (int[])
+    public static Action<ulong, int[]> OnServerTokensTaken;
+
+    // 当银行驳回拿钱请求时广播。
+    // 参数1：犯规的玩家 ID (ulong)；参数2：警告信息 (string)
+    public static Action<ulong, string> OnServerTakeTokensFailed;
 }

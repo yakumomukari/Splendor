@@ -63,14 +63,10 @@ public class MarketManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // 2. 【新增】监听服务器的买卡/预约成功广播
-        GameEvents.OnServerCardBought += RemoveCardFromMarket;
-        // GameEvents.OnServerCardReserved += RemoveCardFromMarket;
     }
 
     private void OnDisable()
     {
-        GameEvents.OnServerCardBought -= RemoveCardFromMarket;
     }
     // 3. 【新增】供服务器调用的查询接口
     public CardSO GetCardById(int id)
@@ -126,19 +122,7 @@ public class MarketManager : MonoBehaviour
             cardUI.SetState(canAfford && isMyTurn);
         }
     }
-    // 5. 【新增】物理移除逻辑
-    private void RemoveCardFromMarket(int cardId)
-    {
-        // 找到那个对应的 CardUI 并销毁
-        CardUI targetUI = activeCardUIs.Find(x => x.GetCardId() == cardId);
-        if (targetUI != null)
-        {
-            activeCardUIs.Remove(targetUI);
-            cardDataMap.Remove(cardId);
-            Destroy(targetUI.gameObject);
-            Debug.Log($"[Market] 卡牌 {cardId} 已从市场移除。");
-        }
-    }
+    // 市场移除与补牌由 MarketDeckManager 的网络状态驱动，不在本地直接删卡。
     /// <summary>
     /// 清理指定父节点下的所有子物体
     /// </summary>

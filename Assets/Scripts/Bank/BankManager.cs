@@ -19,6 +19,38 @@ public class BankManager : NetworkBehaviour
         else Destroy(gameObject);
     }
 
+    public override void OnNetworkSpawn()
+    {
+        if (!IsServer) return;
+
+        int playerCount = NetworkManager.Singleton != null
+            ? Mathf.Max(1, NetworkManager.Singleton.ConnectedClientsList.Count)
+            : 1;
+
+        InitializeBankByPlayerCount(playerCount);
+    }
+
+    public void InitializeBankByPlayerCount(int playerCount)
+    {
+        int baseGemCount = GetBaseGemCountByPlayerCount(playerCount);
+
+        EmeraldCount.Value = baseGemCount;
+        SapphireCount.Value = baseGemCount;
+        RubyCount.Value = baseGemCount;
+        DiamondCount.Value = baseGemCount;
+        OnyxCount.Value = baseGemCount;
+        GoldCount.Value = 5;
+
+        Debug.Log($"[Bank] 按人数初始化完成。玩家数:{playerCount} 基础宝石:{baseGemCount} 黄金:5");
+    }
+
+    private static int GetBaseGemCountByPlayerCount(int playerCount)
+    {
+        if (playerCount <= 2) return 4;
+        if (playerCount == 3) return 5;
+        return 7;
+    }
+
     [ServerRpc(RequireOwnership = false)]
     public void RequestTakeTokensServerRpc(int em, int sa, int ru, int di, int on, ServerRpcParams rpcParams = default)
     {

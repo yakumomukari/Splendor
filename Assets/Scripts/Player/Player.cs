@@ -98,6 +98,7 @@ public class Player : NetworkBehaviour
         if (IsOwner)
         {
             // 监听 B 画的 UI 发出的买卡事件
+            GameEvents.OnTakeTokensReq += HandleTakeTokensRequest;
             GameEvents.OnBuyCardReq += HandleBuyCardRequest;
             GameEvents.OnReserveCardReq += HandleReserveCardRequest;
             GameEvents.OnReturnTokensReq += HandleReturnTokens;
@@ -121,6 +122,7 @@ public class Player : NetworkBehaviour
         {
             // 监听 A 的银行发出的全服入账广播
             GameEvents.OnServerTokensTaken += HandleServerTokensTaken;
+            GameEvents.OnServerTakeTokensFailed += HandleServerTakeTokensFailed;
         }
     }
 
@@ -129,12 +131,48 @@ public class Player : NetworkBehaviour
         // 经典的 C# 防内存泄漏操作
         if (IsOwner)
         {
+            GameEvents.OnTakeTokensReq -= HandleTakeTokensRequest;
             GameEvents.OnBuyCardReq -= HandleBuyCardRequest;
             GameEvents.OnReserveCardReq -= HandleReserveCardRequest;
             GameEvents.OnReturnTokensReq -= HandleReturnTokens;
         }
-        if (IsServer) GameEvents.OnServerTokensTaken -= HandleServerTokensTaken;
+        if (IsServer)
+        {
+            GameEvents.OnServerTokensTaken -= HandleServerTokensTaken;
+            GameEvents.OnServerTakeTokensFailed -= HandleServerTakeTokensFailed;
+        }
     }
+
+    private void HandleTakeTokensRequest(int[] requestedTokens)
+    {
+        if (requestedTokens == null || requestedTokens.Length < 5)
+        {
+            GameEvents.OnShowWarningMsg?.Invoke("拿取参数错误：需要5种基础宝石数量。");
+            return;
+        }
+
+        if (BankManager.Instance == null)
+        {
+            GameEvents.OnShowWarningMsg?.Invoke("银行系统未初始化。请稍后重试。");
+            return;
+        }
+
+        // UI顺序: 白,蓝,绿,红,黑 -> 银行RPC顺序: 绿,蓝,红,白,黑
+        int white = requestedTokens[0];
+        int blue = requestedTokens[1];
+        int green = requestedTokens[2];
+        int red = requestedTokens[3];
+        int black = requestedTokens[4];
+
+        BankManager.Instance.RequestTakeTokensServerRpc(
+            green,
+            blue,
+            red,
+            white,
+            black
+        );
+    }
+
     private void HandleReturnTokens(int[] tokensToReturn)
     {
         Debug.Log("[Client] 向服务器上交多余的代币...");
@@ -205,6 +243,12 @@ public class Player : NetworkBehaviour
             }
             Discounts.Value = currentDiscounts;
 
+            // 3.5 买卡后判定是否获得贵族(领主)
+            if (NobleManager.Instance != null)
+            {
+                NobleManager.Instance.TryGrantNobleToPlayer(this);
+            }
+
             // 4. 银行入账
             BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
 
@@ -246,6 +290,12 @@ public class Player : NetworkBehaviour
         // 拿钱动作完成，强制推进状态机
         // TurnManager.Instance.GoToNextTurn();
         TryEndTurn();
+    }
+
+    private void HandleServerTakeTokensFailed(ulong playerId, string reason)
+    {
+        if (playerId != OwnerClientId) return;
+        ShowTakeTokenFailedClientRpc(reason);
     }
     // 新增：玩家捏在手里的预约卡牌
     public NetworkVariable<ReservedCards> Reserved = new NetworkVariable<ReservedCards>(
@@ -330,6 +380,13 @@ public class Player : NetworkBehaviour
         Debug.Log($"[Client] 收到服务器催债通知：我得还 {overCount} 个代币。");
         // 呼叫 B 画的 UI 弹出一个强制还钱的面板
         GameEvents.OnClientMustReturnTokens?.Invoke(overCount);
+    }
+
+    [ClientRpc]
+    private void ShowTakeTokenFailedClientRpc(string reason)
+    {
+        if (!IsOwner) return;
+        GameEvents.OnShowWarningMsg?.Invoke(reason);
     }
     // ==========================================
     // 玩家还钱接收 (Client -> Server)

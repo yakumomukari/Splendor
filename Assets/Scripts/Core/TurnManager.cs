@@ -17,6 +17,9 @@ public class TurnManager : NetworkBehaviour
     // 【核心】服务器端维护的玩家真实顺序表 (不参与网络序列化，只存在于服务器内存)
     private List<ulong> playerOrder = new List<ulong>();
 
+    // 新增：防老赖专用锁
+    public NetworkVariable<bool> IsWaitingForReturn = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     private void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);

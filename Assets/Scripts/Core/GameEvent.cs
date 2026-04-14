@@ -43,7 +43,7 @@ public static class GameEvents
     // ==========================================
     // 🟢 新增：服务器内部解耦广播 (服务器发送 -> 服务器接收)
     // ==========================================
-    
+
     // 当银行成功扣款后广播。
     // 参数1：拿钱的玩家 ID (ulong)；参数2：拿取的各颜色数量 (int[])
     public static Action<ulong, int[]> OnServerTokensTaken;
@@ -51,4 +51,10 @@ public static class GameEvents
     // 当银行驳回拿钱请求时广播。
     // 参数1：犯规的玩家 ID (ulong)；参数2：警告信息 (string)
     public static Action<ulong, string> OnServerTakeTokensFailed;
+    // 广播某张卡被买走了，UI 负责监听并销毁那张卡
+    public static Action<int> OnServerCardBought;
+
+    // 服务器发现你代币超载，强制要求你还钱 (逻辑层 -> UI层)
+    // 参数：需要还的数量
+    public static Action<int> OnClientMustReturnTokens;
 }

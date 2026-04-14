@@ -8,7 +8,7 @@ public class CardUI : MonoBehaviour
     public TextMeshProUGUI pointsText;         // 威望分数文本
     public TextMeshProUGUI bonusGemText;       // 奖励宝石类型的表现（实际开发中可能是 Image）
     public GameObject lockOverlay;             // 半透明遮罩层
-    
+
     [Header("Cost UI Elements")]
     public TextMeshProUGUI costWhiteText;      // 可以根据实际情况考虑用数组结构
     public TextMeshProUGUI costBlueText;
@@ -18,6 +18,9 @@ public class CardUI : MonoBehaviour
 
     // 缓存当前卡牌的 ID，用于点击购买时发送事件
     private int currentCardId;
+
+    // 在 CardUI.cs 里补上这个
+    public int GetCardId() => currentCardId;
 
     /// <summary>
     /// 根据传入的 CardSO 数据刷新外观

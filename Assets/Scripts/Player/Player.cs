@@ -264,9 +264,13 @@ public class Player : NetworkBehaviour
                 GameEvents.OnServerCardBought?.Invoke(cardId);
             }
 
-            // 6. 推进状态机
-            if (Score.Value >= 15) Debug.Log("达成胜利条件！");
-            TurnManager.Instance.GoToNextTurn();
+            // 6. 推进状态机 (修改 BuyCardServerRpc 的最后几行)
+            if (Score.Value >= 15 && !TurnManager.Instance.IsLastRound.Value)
+            {
+                Debug.Log($"[Server] 玩家 {senderId} 达到 15 分，触发终局圈！");
+                TurnManager.Instance.IsLastRound.Value = true;
+            }
+            TryEndTurn();
         }
     }
 
@@ -356,7 +360,6 @@ public class Player : NetworkBehaviour
             Debug.Log($"[Server] 拦截！玩家 {OwnerClientId} 贪得无厌，代币数量 {totalTokens}/10。强制其归还 {overCount} 个。");
             // 上锁！全局禁止任何操作！
             TurnManager.Instance.IsWaitingForReturn.Value = true;
-            RequireReturnTokensClientRpc(overCount);
 
             // 呼叫客户端弹窗。不用搞复杂的 TargetRpc，直接群发然后靠 IsOwner 本地拦截最稳
             RequireReturnTokensClientRpc(overCount);

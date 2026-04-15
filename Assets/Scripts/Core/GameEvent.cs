@@ -57,4 +57,5 @@ public static class GameEvents
     // 服务器发现你代币超载，强制要求你还钱 (逻辑层 -> UI层)
     // 参数：需要还的数量
     public static Action<int> OnClientMustReturnTokens;
+    public static Action<ulong, int> OnGameEnded;
 }

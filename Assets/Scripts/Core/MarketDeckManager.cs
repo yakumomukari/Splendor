@@ -101,7 +101,14 @@ public class MarketDeckManager : NetworkBehaviour
                 break;
         }
 
-            SyncDeckRemaining();
+        SyncDeckRemaining();
+    }
+
+    public bool IsCardVisible(int cardId)
+    {
+        return ContainsCard(Tier1VisibleIds, cardId)
+            || ContainsCard(Tier2VisibleIds, cardId)
+            || ContainsCard(Tier3VisibleIds, cardId);
     }
 
     private static void FillFaceUp(NetworkList<int> visible, Queue<int> deck, int targetCount)
@@ -114,18 +121,28 @@ public class MarketDeckManager : NetworkBehaviour
 
     private static void ReplaceBoughtCard(NetworkList<int> visible, Queue<int> deck, int cardId)
     {
+        int boughtIndex = -1;
         for (int i = 0; i < visible.Count; i++)
         {
             if (visible[i] == cardId)
             {
-                visible.RemoveAt(i);
+                boughtIndex = i;
                 break;
             }
         }
 
+        if (boughtIndex < 0)
+        {
+            return;
+        }
+
         if (deck.Count > 0)
         {
-            visible.Add(deck.Dequeue());
+            visible[boughtIndex] = deck.Dequeue();
+        }
+        else
+        {
+            visible.RemoveAt(boughtIndex);
         }
     }
 
@@ -170,5 +187,18 @@ public class MarketDeckManager : NetworkBehaviour
                 target.Add(card);
             }
         }
+    }
+
+    private static bool ContainsCard(NetworkList<int> ids, int cardId)
+    {
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (ids[i] == cardId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

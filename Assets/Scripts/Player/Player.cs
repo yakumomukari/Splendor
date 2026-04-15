@@ -195,83 +195,121 @@ public class Player : NetworkBehaviour
     [ServerRpc(RequireOwnership = true)]
     private void BuyCardServerRpc(int cardId, ServerRpcParams rpcParams = default)
     {
-        if (TurnManager.Instance.IsWaitingForReturn.Value) return; // 催债期间，全场静止！
+        if (TurnManager.Instance == null)
+        {
+            ShowBuyFailedClientRpc("回合系统未初始化，暂时无法购买。", BuildSingleTargetRpcParams(rpcParams.Receive.SenderClientId));
+            return;
+        }
+
+        if (TurnManager.Instance.IsWaitingForReturn.Value)
+        {
+            ShowBuyFailedClientRpc("当前有玩家在归还代币，暂时无法购买。", BuildSingleTargetRpcParams(rpcParams.Receive.SenderClientId));
+            return;
+        } // 催债期间，全场静止！
+
         ulong senderId = rpcParams.Receive.SenderClientId;
-        if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
+        if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId)
+        {
+            ShowBuyFailedClientRpc("还没轮到你行动。", BuildSingleTargetRpcParams(senderId));
+            return;
+        }
+
+        if (GlobalCardDatabase.Instance == null)
+        {
+            ShowBuyFailedClientRpc("卡牌数据库未初始化。", BuildSingleTargetRpcParams(senderId));
+            return;
+        }
 
         // 从全局图鉴拿数据
         CardSO card = GlobalCardDatabase.Instance.GetCard(cardId);
-        if (card == null) return;
+        if (card == null)
+        {
+            ShowBuyFailedClientRpc("目标卡牌不存在。", BuildSingleTargetRpcParams(senderId));
+            return;
+        }
+
+        bool isReservedCard = Reserved.Value.Slot1 == cardId || Reserved.Value.Slot2 == cardId || Reserved.Value.Slot3 == cardId;
+        bool isVisibleMarketCard = MarketDeckManager.Instance != null && MarketDeckManager.Instance.IsCardVisible(cardId);
+        if (!isReservedCard && !isVisibleMarketCard)
+        {
+            ShowBuyFailedClientRpc("该卡牌已不在可购买区域。", BuildSingleTargetRpcParams(senderId));
+            return;
+        }
 
         int[] cardCosts = new int[] { card.costWhite, card.costBlue, card.costGreen, card.costRed, card.costBlack };
 
-        if (CanAfford(cardCosts))
+        if (!CanAfford(cardCosts))
         {
-            // 1. 算出具体扣多少钱 (贪心策略)
-            GameRules.CanAffordCard(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, cardCosts, out int goldNeeded);
-
-            var currentTokens = Tokens.Value;
-            int[] actualPaid = new int[5];
-            int[] playerGems = currentTokens.ToBaseGemArray();
-            int[] playerDiscounts = Discounts.Value.ToBaseGemArray();
-
-            for (int i = 0; i < 5; i++)
-            {
-                int actualCost = Math.Max(0, cardCosts[i] - playerDiscounts[i]);
-                actualPaid[i] = Math.Min(actualCost, playerGems[i]);
-            }
-
-            // 2. 扣除个人资产
-            currentTokens.White -= actualPaid[0];
-            currentTokens.Blue -= actualPaid[1];
-            currentTokens.Green -= actualPaid[2];
-            currentTokens.Red -= actualPaid[3];
-            currentTokens.Black -= actualPaid[4];
-            currentTokens.Gold -= goldNeeded;
-            Tokens.Value = currentTokens;
-
-            // 3. 增加收益 (分数与折扣)
-            Score.Value += card.points;
-            var currentDiscounts = Discounts.Value;
-            switch (card.bonusGem)
-            {
-                case GemType.White: currentDiscounts.White++; break;
-                case GemType.Blue: currentDiscounts.Blue++; break;
-                case GemType.Green: currentDiscounts.Green++; break;
-                case GemType.Red: currentDiscounts.Red++; break;
-                case GemType.Black: currentDiscounts.Black++; break;
-            }
-            Discounts.Value = currentDiscounts;
-
-            // 3.5 买卡后判定是否获得贵族(领主)
-            if (NobleManager.Instance != null)
-            {
-                NobleManager.Instance.TryGrantNobleToPlayer(this);
-            }
-
-            // 4. 银行入账
-            BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
-
-            // 5. 【核心兼容】如果买的是预约的卡，从兜里移除；否则从市场移除
-            var currentReserved = Reserved.Value;
-            if (currentReserved.Slot1 == cardId || currentReserved.Slot2 == cardId || currentReserved.Slot3 == cardId)
-            {
-                currentReserved.RemoveCard(cardId);
-                Reserved.Value = currentReserved;
-            }
-            else
-            {
-                GameEvents.OnServerCardBought?.Invoke(cardId);
-            }
-
-            // 6. 推进状态机 (修改 BuyCardServerRpc 的最后几行)
-            if (Score.Value >= 15 && !TurnManager.Instance.IsLastRound.Value)
-            {
-                Debug.Log($"[Server] 玩家 {senderId} 达到 15 分，触发终局圈！");
-                TurnManager.Instance.IsLastRound.Value = true;
-            }
-            TryEndTurn();
+            ShowBuyFailedClientRpc("代币不足，无法购买这张卡。", BuildSingleTargetRpcParams(senderId));
+            return;
         }
+
+        if (BankManager.Instance == null)
+        {
+            ShowBuyFailedClientRpc("银行系统未初始化。", BuildSingleTargetRpcParams(senderId));
+            return;
+        }
+
+        // 1. 算出具体扣多少钱 (贪心策略)
+        GameRules.CanAffordCard(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, cardCosts, out int goldNeeded);
+
+        var currentTokens = Tokens.Value;
+        int[] actualPaid = new int[5];
+        int[] playerGems = currentTokens.ToBaseGemArray();
+        int[] playerDiscounts = Discounts.Value.ToBaseGemArray();
+
+        for (int i = 0; i < 5; i++)
+        {
+            int actualCost = Math.Max(0, cardCosts[i] - playerDiscounts[i]);
+            actualPaid[i] = Math.Min(actualCost, playerGems[i]);
+        }
+
+        // 2. 扣除个人资产
+        currentTokens.White -= actualPaid[0];
+        currentTokens.Blue -= actualPaid[1];
+        currentTokens.Green -= actualPaid[2];
+        currentTokens.Red -= actualPaid[3];
+        currentTokens.Black -= actualPaid[4];
+        currentTokens.Gold -= goldNeeded;
+        Tokens.Value = currentTokens;
+
+        // 3. 增加收益 (分数与折扣)
+        Score.Value += card.points;
+        var currentDiscounts = Discounts.Value;
+        switch (card.bonusGem)
+        {
+            case GemType.White: currentDiscounts.White++; break;
+            case GemType.Blue: currentDiscounts.Blue++; break;
+            case GemType.Green: currentDiscounts.Green++; break;
+            case GemType.Red: currentDiscounts.Red++; break;
+            case GemType.Black: currentDiscounts.Black++; break;
+        }
+        Discounts.Value = currentDiscounts;
+
+        // 3.5 买卡后判定是否获得贵族(领主)
+        if (NobleManager.Instance != null)
+        {
+            NobleManager.Instance.TryGrantNobleToPlayer(this);
+        }
+
+        // 4. 银行入账
+        BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
+
+        // 5. 【核心兼容】如果买的是预约的卡，从兜里移除；否则从市场移除
+        var currentReserved = Reserved.Value;
+        if (currentReserved.Slot1 == cardId || currentReserved.Slot2 == cardId || currentReserved.Slot3 == cardId)
+        {
+            currentReserved.RemoveCard(cardId);
+            Reserved.Value = currentReserved;
+        }
+        else
+        {
+            GameEvents.OnServerCardBought?.Invoke(cardId);
+        }
+
+        // 6. 推进状态机
+        if (Score.Value >= 15) Debug.Log("达成胜利条件！");
+        TurnManager.Instance.GoToNextTurn();
     }
 
     // 2. 接收银行的发钱广播
@@ -391,6 +429,12 @@ public class Player : NetworkBehaviour
         if (!IsOwner) return;
         GameEvents.OnShowWarningMsg?.Invoke(reason);
     }
+
+    [ClientRpc]
+    private void ShowBuyFailedClientRpc(string reason, ClientRpcParams clientRpcParams = default)
+    {
+        GameEvents.OnShowWarningMsg?.Invoke(reason);
+    }
     // ==========================================
     // 玩家还钱接收 (Client -> Server)
     // ==========================================
@@ -419,5 +463,16 @@ public class Player : NetworkBehaviour
         // 解锁，放行！
         TurnManager.Instance.IsWaitingForReturn.Value = false;
         TurnManager.Instance.GoToNextTurn();
+    }
+
+    private static ClientRpcParams BuildSingleTargetRpcParams(ulong clientId)
+    {
+        return new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { clientId }
+            }
+        };
     }
 }

@@ -27,33 +27,68 @@ public class MarketManager : MonoBehaviour
 
     // 缓存本地玩家的指针，O(1) 访问，告别 GetComponent
     private Player localPlayerCache;
+    private bool turnEventsBound;
 
     // 留给 Player 实体主动上门注册的接口
     public void RegisterLocalPlayer(Player player)
     {
+        if (localPlayerCache == player)
+        {
+            TryRefreshMarketInteractable();
+            return;
+        }
+
+        UnbindLocalPlayerEvents();
         localPlayerCache = player;
-        Debug.Log("[Market] 本地玩家数据已接入市场UI！");
 
-        // 【打补丁】：只要钱包或折扣变了，立刻触发一次市场UI验资！
-        localPlayerCache.Tokens.OnValueChanged += (oldVal, newVal) => RefreshMarketUI();
-        localPlayerCache.Discounts.OnValueChanged += (oldVal, newVal) => RefreshMarketUI();
+        if (localPlayerCache != null)
+        {
+            Debug.Log("[Market] 本地玩家数据已接入市场UI！");
+            localPlayerCache.Tokens.OnValueChanged += OnLocalPlayerTokensChanged;
+            localPlayerCache.Discounts.OnValueChanged += OnLocalPlayerDiscountsChanged;
+        }
 
-        RefreshMarketUI();
+        TryRefreshMarketInteractable();
     }
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
     }
+
+    private void OnEnable()
+    {
+        TryBindTurnEvents();
+        TryRefreshMarketInteractable();
+    }
+
     private void Update()
     {
-        // 如果指针为空，直接 return，不产生任何垃圾回收(GC)和寻址开销
+        if (!turnEventsBound)
+        {
+            TryBindTurnEvents();
+        }
+    }
+
+    private void OnDisable()
+    {
+        UnbindTurnEvents();
+        UnbindLocalPlayerEvents();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+    private void TryRefreshMarketInteractable()
+    {
         if (localPlayerCache == null) return;
 
-        RefreshMarketUI();
-    }
-    private void RefreshMarketUI()
-    {
         SetMarketInteractable(
             localPlayerCache.Tokens.Value.ToBaseGemArray(),
             localPlayerCache.Discounts.Value.ToBaseGemArray(),
@@ -61,13 +96,6 @@ public class MarketManager : MonoBehaviour
         );
     }
 
-    private void OnEnable()
-    {
-    }
-
-    private void OnDisable()
-    {
-    }
     // 3. 【新增】供服务器调用的查询接口
     public CardSO GetCardById(int id)
     {
@@ -97,6 +125,8 @@ public class MarketManager : MonoBehaviour
                 cardDataMap.Add(card.id, card); // 记录 ID 与数据的映射
             }
         }
+
+        TryRefreshMarketInteractable();
     }
 
     // 4. 【修改】引入回合判定逻辑
@@ -104,22 +134,29 @@ public class MarketManager : MonoBehaviour
     {
         // 极限防雷：确保网络组件和状态机都已经活过来了
         bool isMyTurn = false;
+        bool isBlockedByReturn = false;
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient && TurnManager.Instance != null)
         {
             isMyTurn = TurnManager.Instance.CurrentActivePlayerId.Value == NetworkManager.Singleton.LocalClientId;
+            isBlockedByReturn = TurnManager.Instance.IsWaitingForReturn.Value;
         }
+
         foreach (var cardUI in activeCardUIs)
         {
             if (cardUI == null) continue;
 
             int cardId = cardUI.GetCardId(); // 记得去 CardUI 里加这个 Getter
-            CardSO data = cardDataMap[cardId];
+            if (!cardDataMap.TryGetValue(cardId, out CardSO data) || data == null)
+            {
+                cardUI.SetState(false);
+                continue;
+            }
 
             int[] cardCosts = new int[] { data.costWhite, data.costBlue, data.costGreen, data.costRed, data.costBlack };
 
             // 只有【钱够】且【是我的回合】，按钮才亮起
             bool canAfford = GameRules.CanAffordCard(playerTokens, playerDiscounts, playerGold, cardCosts, out _);
-            cardUI.SetState(canAfford && isMyTurn);
+            cardUI.SetState(canAfford && isMyTurn && !isBlockedByReturn);
         }
     }
     // 市场移除与补牌由 MarketDeckManager 的网络状态驱动，不在本地直接删卡。
@@ -149,5 +186,54 @@ public class MarketManager : MonoBehaviour
                 Debug.LogWarning($"未知的卡牌等级: {level}");
                 return null;
         }
+    }
+
+    private void OnLocalPlayerTokensChanged(TokenAssets _, TokenAssets __)
+    {
+        TryRefreshMarketInteractable();
+    }
+
+    private void OnLocalPlayerDiscountsChanged(TokenAssets _, TokenAssets __)
+    {
+        TryRefreshMarketInteractable();
+    }
+
+    private void TryBindTurnEvents()
+    {
+        if (turnEventsBound) return;
+        if (TurnManager.Instance == null) return;
+
+        TurnManager.Instance.CurrentActivePlayerId.OnValueChanged += OnTurnChanged;
+        TurnManager.Instance.IsWaitingForReturn.OnValueChanged += OnWaitReturnChanged;
+        turnEventsBound = true;
+    }
+
+    private void UnbindTurnEvents()
+    {
+        if (!turnEventsBound) return;
+        if (TurnManager.Instance == null) return;
+
+        TurnManager.Instance.CurrentActivePlayerId.OnValueChanged -= OnTurnChanged;
+        TurnManager.Instance.IsWaitingForReturn.OnValueChanged -= OnWaitReturnChanged;
+        turnEventsBound = false;
+    }
+
+    private void OnTurnChanged(ulong _, ulong __)
+    {
+        TryRefreshMarketInteractable();
+    }
+
+    private void OnWaitReturnChanged(bool _, bool __)
+    {
+        TryRefreshMarketInteractable();
+    }
+
+    private void UnbindLocalPlayerEvents()
+    {
+        if (localPlayerCache == null) return;
+
+        localPlayerCache.Tokens.OnValueChanged -= OnLocalPlayerTokensChanged;
+        localPlayerCache.Discounts.OnValueChanged -= OnLocalPlayerDiscountsChanged;
+        localPlayerCache = null;
     }
 }

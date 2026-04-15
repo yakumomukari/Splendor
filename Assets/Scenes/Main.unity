@@ -6555,7 +6555,8 @@ GameObject:
   m_Component:
   - component: {fileID: 778021646}
   - component: {fileID: 778021645}
-  - component: {fileID: 778021644}
+  - component: {fileID: 778021647}
+  - component: {fileID: 778021648}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -6563,33 +6564,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &778021644
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 778021643}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_ProtocolType: 0
-  m_MaxPacketQueueSize: 128
-  m_MaxPayloadSize: 6144
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 60
-  m_DisconnectTimeoutMS: 30000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    ServerListenAddress: 127.0.0.1
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
 --- !u!114 &778021645
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6604,7 +6578,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   NetworkConfig:
     ProtocolVersion: 0
-    NetworkTransport: {fileID: 778021644}
+    NetworkTransport: {fileID: 778021647}
     PlayerPrefab: {fileID: 336188813885737178, guid: c60c23a9713df984591c69a872ba0616, type: 3}
     Prefabs:
       NetworkPrefabsLists:
@@ -6642,6 +6616,36 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &778021647
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 778021643}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54618226c9df54608af7731199ed5f0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ConnectAddress: 115.25.46.153
+  Path: /netcode
+  Port: 8080
+  SecureConnection: 0
+  AllowForwardedRequest: 0
+  CertificateBase64String: 
+--- !u!114 &778021648
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 778021643}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ced08b8e4ffa4243b24168fd6bf2861, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &799174040
 GameObject:
   m_ObjectHideFlags: 0

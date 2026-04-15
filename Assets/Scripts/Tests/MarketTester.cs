@@ -23,6 +23,11 @@ public class LocalUIDriver : MonoBehaviour
     private int[] bankTokens = new int[5] { 7, 7, 7, 7, 7 };
     private int bankGold = 5;
 
+    // 模拟牌堆剩余数量
+    private int deck1Count = 10;
+    private int deck2Count = 10;
+    private int deck3Count = 10;
+
     private void Start()
     {
         // 提取前 12 张卡作为初始市场
@@ -89,7 +94,7 @@ public class LocalUIDriver : MonoBehaviour
     private void RefreshMarket()
     {
         // 调用 MarketManager 的接口刷新排版与交互状态
-        marketManager.UpdateMarket(activeCards);
+        marketManager.UpdateMarket(activeCards, deck1Count, deck2Count, deck3Count);
         marketManager.SetMarketInteractable(playerTokens, playerDiscounts, playerGold);
     }
 
@@ -180,6 +185,11 @@ public class LocalUIDriver : MonoBehaviour
                 CardSO newCard = testDeck[Random.Range(12, testDeck.Count)];
                 activeCards.Insert(index, newCard);
                 Debug.Log($"[系统模拟] 补充新卡牌 ID: {newCard.id}");
+
+                // 模拟根据等级减少对应牌堆数量
+                if (newCard.level == 1) deck1Count--;
+                else if (newCard.level == 2) deck2Count--;
+                else if (newCard.level == 3) deck3Count--;
             }
         }
 

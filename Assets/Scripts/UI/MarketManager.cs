@@ -14,16 +14,52 @@ public class MarketManager : MonoBehaviour
     public Transform tier2Parent; // 等级 2 的卡牌父节点
     public Transform tier3Parent; // 等级 3 的卡牌父节点
 
+    [Header("Deck UI Bindings")]
+    public DeckUI deckUI_T1;
+    public DeckUI deckUI_T2;
+    public DeckUI deckUI_T3;
+
     // 用于缓存生成的 CardUI 以及它所对应的 CardSO 数据
     private List<CardUI> activeCardUIs = new List<CardUI>();
     private Dictionary<int, CardSO> cardDataMap = new Dictionary<int, CardSO>();
 
     /// <summary>
-    /// 更新场上的卡牌展示
+    /// 更新场上的卡牌展示，同时更新三排牌堆的剩余数量
     /// </summary>
     /// <param name="cards">需要展示在场上的卡牌列表</param>
+    /// <param name="t1Count">Level 1 牌堆剩余数量</param>
+    /// <param name="t2Count">Level 2 牌堆剩余数量</param>
+    /// <param name="t3Count">Level 3 牌堆剩余数量</param>
+    public void UpdateMarket(List<CardSO> cards, int t1Count, int t2Count, int t3Count)
+    {
+        ClearParent(tier1Parent);
+        ClearParent(tier2Parent);
+        ClearParent(tier3Parent);
+        activeCardUIs.Clear();
+        cardDataMap.Clear();
 
+        foreach (var card in cards)
+        {
+            if (card == null) continue;
 
+            Transform targetParent = GetParentByTier(card.level);
+            if (targetParent != null)
+            {
+                CardUI newCardUI = Instantiate(cardPrefab, targetParent);
+                newCardUI.Setup(card);
+
+                activeCardUIs.Add(newCardUI);
+                cardDataMap.Add(card.id, card); // 记录 ID 与数据的映射
+            }
+        }
+
+        // 更新牌堆剩余数量显示
+        if (deckUI_T1 != null) deckUI_T1.UpdateCount(t1Count);
+        if (deckUI_T2 != null) deckUI_T2.UpdateCount(t2Count);
+        if (deckUI_T3 != null) deckUI_T3.UpdateCount(t3Count);
+
+        TryRefreshMarketInteractable();
+    }
 
     // 缓存本地玩家的指针，O(1) 访问，告别 GetComponent
     private Player localPlayerCache;
@@ -102,31 +138,6 @@ public class MarketManager : MonoBehaviour
         if (cardDataMap.ContainsKey(id)) return cardDataMap[id];
         Debug.LogError($"[Market] 找不到 ID 为 {id} 的卡牌！");
         return null;
-    }
-    public void UpdateMarket(List<CardSO> cards)
-    {
-        ClearParent(tier1Parent);
-        ClearParent(tier2Parent);
-        ClearParent(tier3Parent);
-        activeCardUIs.Clear();
-        cardDataMap.Clear();
-
-        foreach (var card in cards)
-        {
-            if (card == null) continue;
-
-            Transform targetParent = GetParentByTier(card.level);
-            if (targetParent != null)
-            {
-                CardUI newCardUI = Instantiate(cardPrefab, targetParent);
-                newCardUI.Setup(card);
-
-                activeCardUIs.Add(newCardUI);
-                cardDataMap.Add(card.id, card); // 记录 ID 与数据的映射
-            }
-        }
-
-        TryRefreshMarketInteractable();
     }
 
     // 4. 【修改】引入回合判定逻辑

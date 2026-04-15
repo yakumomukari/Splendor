@@ -172,7 +172,12 @@ public class MarketDeckManager : NetworkBehaviour
         AppendCards(cards, Tier2VisibleIds);
         AppendCards(cards, Tier3VisibleIds);
 
-        MarketManager.Instance.UpdateMarket(cards);
+        MarketManager.Instance.UpdateMarket(
+            cards,
+            Tier1DeckRemaining.Value,
+            Tier2DeckRemaining.Value,
+            Tier3DeckRemaining.Value
+        );
     }
 
     private static void AppendCards(List<CardSO> target, NetworkList<int> ids)

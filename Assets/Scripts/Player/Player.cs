@@ -2,10 +2,11 @@ using Unity.Netcode;
 using UnityEngine;
 using System;
 
-// 1. 结构体升级：加上转数组的方法，迎合 B 的胃口
+// 1. 结构体定义
+[Serializable]
 public struct TokenAssets : INetworkSerializable
 {
-    // ⚠️ 极其重要：必须严格按照 B 定的顺序：白, 蓝, 绿, 红, 黑, (金)
+    // 必须严格按照顺序：白, 蓝, 绿, 红, 黑, 金
     public int White, Blue, Green, Red, Black, Gold;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
@@ -18,17 +19,15 @@ public struct TokenAssets : INetworkSerializable
         serializer.SerializeValue(ref Gold);
     }
 
-    // 适配器魔法：给 B 的算法吐出一个长度为 5 的基础宝石数组
     public int[] ToBaseGemArray()
     {
         return new int[] { White, Blue, Green, Red, Black };
     }
 }
 
-// 专门用来存预约卡牌 ID 的定长数据结构
+[Serializable]
 public struct ReservedCards : INetworkSerializable
 {
-    // 默认全填 -1，代表空槽位
     public int Slot1, Slot2, Slot3;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
@@ -38,16 +37,14 @@ public struct ReservedCards : INetworkSerializable
         serializer.SerializeValue(ref Slot3);
     }
 
-    // 辅助方法：找空槽塞入卡牌
     public bool TryAddCard(int cardId)
     {
         if (Slot1 == -1) { Slot1 = cardId; return true; }
         if (Slot2 == -1) { Slot2 = cardId; return true; }
         if (Slot3 == -1) { Slot3 = cardId; return true; }
-        return false; // 满了，加不进去
+        return false;
     }
 
-    // 辅助方法：买下预约卡后，清空对应槽位
     public void RemoveCard(int cardId)
     {
         if (Slot1 == cardId) Slot1 = -1;
@@ -56,27 +53,31 @@ public struct ReservedCards : INetworkSerializable
     }
 }
 
-// 2. 玩家实体升级：补齐折扣字段与网络交互行为
+// 2. 玩家实体类
 public class Player : NetworkBehaviour
 {
     public NetworkVariable<int> Score = new NetworkVariable<int>(0);
 
-    // 玩家手里的实体代币
     public NetworkVariable<TokenAssets> Tokens = new NetworkVariable<TokenAssets>(
         new TokenAssets(),
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
-    // 玩家买卡积累的永久折扣
     public NetworkVariable<TokenAssets> Discounts = new NetworkVariable<TokenAssets>(
         new TokenAssets(),
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server
     );
 
+    public NetworkVariable<ReservedCards> Reserved = new NetworkVariable<ReservedCards>(
+        new ReservedCards { Slot1 = -1, Slot2 = -1, Slot3 = -1 },
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
     // ==========================================
-    // 给你自己用的高阶判定方法
+    // 逻辑判定
     // ==========================================
     public bool CanAfford(int[] cardCosts)
     {
@@ -90,14 +91,12 @@ public class Player : NetworkBehaviour
     }
 
     // ==========================================
-    // 网络生命周期与事件绑定 (Client & Server 缝合区)
+    // 生命周期
     // ==========================================
     public override void OnNetworkSpawn()
     {
-        // 如果这个实体是本地玩家控制的（客户端视角）
         if (IsOwner)
         {
-            // 监听 B 画的 UI 发出的买卡事件
             GameEvents.OnTakeTokensReq += HandleTakeTokensRequest;
             GameEvents.OnBuyCardReq += HandleBuyCardRequest;
             GameEvents.OnReserveCardReq += HandleReserveCardRequest;
@@ -110,17 +109,12 @@ public class Player : NetworkBehaviour
                 Discounts.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), newVal.ToBaseGemArray(), Tokens.Value.Gold, Score.Value);
                 Score.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, newVal);
             }
-            // 【新增】：主动把自己的指针塞给市场UI
-            if (MarketManager.Instance != null)
-            {
-                MarketManager.Instance.RegisterLocalPlayer(this);
-            }
+
+            if (MarketManager.Instance != null) MarketManager.Instance.RegisterLocalPlayer(this);
         }
 
-        // 如果这段代码跑在服务器上（Host 视角）
         if (IsServer)
         {
-            // 监听 A 的银行发出的全服入账广播
             GameEvents.OnServerTokensTaken += HandleServerTokensTaken;
             GameEvents.OnServerTakeTokensFailed += HandleServerTakeTokensFailed;
         }
@@ -128,7 +122,6 @@ public class Player : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        // 经典的 C# 防内存泄漏操作
         if (IsOwner)
         {
             GameEvents.OnTakeTokensReq -= HandleTakeTokensRequest;
@@ -143,96 +136,56 @@ public class Player : NetworkBehaviour
         }
     }
 
+    // ==========================================
+    // 客户端行为处理
+    // ==========================================
     private void HandleTakeTokensRequest(int[] requestedTokens)
     {
-        if (requestedTokens == null || requestedTokens.Length < 5)
-        {
-            GameEvents.OnShowWarningMsg?.Invoke("拿取参数错误：需要5种基础宝石数量。");
-            return;
-        }
+        if (requestedTokens == null || requestedTokens.Length < 5) return;
+        if (BankManager.Instance == null) return;
 
-        if (BankManager.Instance == null)
-        {
-            GameEvents.OnShowWarningMsg?.Invoke("银行系统未初始化。请稍后重试。");
-            return;
-        }
-
-        // UI顺序: 白,蓝,绿,红,黑 -> 银行RPC顺序: 绿,蓝,红,白,黑
-        int white = requestedTokens[0];
-        int blue = requestedTokens[1];
-        int green = requestedTokens[2];
-        int red = requestedTokens[3];
-        int black = requestedTokens[4];
-
-        BankManager.Instance.RequestTakeTokensServerRpc(
-            green,
-            blue,
-            red,
-            white,
-            black
-        );
+        // UI顺序转银行顺序并发送请求
+        BankManager.Instance.RequestTakeTokensServerRpc(requestedTokens[2], requestedTokens[1], requestedTokens[3], requestedTokens[0], requestedTokens[4]);
     }
 
-    private void HandleReturnTokens(int[] tokensToReturn)
-    {
-        Debug.Log("[Client] 向服务器上交多余的代币...");
-        ReturnTokensServerRpc(tokensToReturn);
-    }
+    private void HandleBuyCardRequest(int cardId) => BuyCardServerRpc(cardId);
+    private void HandleReserveCardRequest(int cardId) => ReserveCardServerRpc(cardId);
+    private void HandleReturnTokens(int[] tokensToReturn) => ReturnTokensServerRpc(tokensToReturn);
 
     // ==========================================
-    // 客户端行为：UI -> RPC 呼叫
-    // ==========================================
-    private void HandleBuyCardRequest(int cardId)
-    {
-        Debug.Log($"[Client] 拦截到 UI 买卡点击，卡牌ID: {cardId}。呼叫服务器...");
-        BuyCardServerRpc(cardId);
-    }
-
-    // ==========================================
-    // 服务器行为：核心业务逻辑
+    // 服务器核心逻辑 (RPCs)
     // ==========================================
 
     [ServerRpc(RequireOwnership = true)]
     private void BuyCardServerRpc(int cardId, ServerRpcParams rpcParams = default)
     {
-        if (TurnManager.Instance == null)
+        ulong senderId = rpcParams.Receive.SenderClientId;
+
+        // 基础验证
+        if (TurnManager.Instance == null || TurnManager.Instance.IsWaitingForReturn.Value)
         {
-            ShowBuyFailedClientRpc("回合系统未初始化，暂时无法购买。", BuildSingleTargetRpcParams(rpcParams.Receive.SenderClientId));
+            ShowBuyFailedClientRpc("系统忙或正在归还代币。", BuildSingleTargetRpcParams(senderId));
             return;
         }
 
-        if (TurnManager.Instance.IsWaitingForReturn.Value)
-        {
-            ShowBuyFailedClientRpc("当前有玩家在归还代币，暂时无法购买。", BuildSingleTargetRpcParams(rpcParams.Receive.SenderClientId));
-            return;
-        } // 催债期间，全场静止！
-
-        ulong senderId = rpcParams.Receive.SenderClientId;
         if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId)
         {
             ShowBuyFailedClientRpc("还没轮到你行动。", BuildSingleTargetRpcParams(senderId));
             return;
         }
 
-        if (GlobalCardDatabase.Instance == null)
-        {
-            ShowBuyFailedClientRpc("卡牌数据库未初始化。", BuildSingleTargetRpcParams(senderId));
-            return;
-        }
+        if (GlobalCardDatabase.Instance == null) return;
 
-        // 从全局图鉴拿数据
         CardSO card = GlobalCardDatabase.Instance.GetCard(cardId);
-        if (card == null)
-        {
-            ShowBuyFailedClientRpc("目标卡牌不存在。", BuildSingleTargetRpcParams(senderId));
-            return;
-        }
+        if (card == null) return;
 
-        bool isReservedCard = Reserved.Value.Slot1 == cardId || Reserved.Value.Slot2 == cardId || Reserved.Value.Slot3 == cardId;
-        bool isVisibleMarketCard = MarketDeckManager.Instance != null && MarketDeckManager.Instance.IsCardVisible(cardId);
-        if (!isReservedCard && !isVisibleMarketCard)
+        // 区域检查：是否在预约位或市场可见
+        bool isReserved = Reserved.Value.Slot1 == cardId || Reserved.Value.Slot2 == cardId || Reserved.Value.Slot3 == cardId;
+        bool isVisible = MarketDeckManager.Instance != null && MarketDeckManager.Instance.IsCardVisible(cardId);
+        
+        if (!isReserved && !isVisible)
         {
-            ShowBuyFailedClientRpc("该卡牌已不在可购买区域。", BuildSingleTargetRpcParams(senderId));
+            ShowBuyFailedClientRpc("卡牌已不在购买区。", BuildSingleTargetRpcParams(senderId));
             return;
         }
 
@@ -240,23 +193,17 @@ public class Player : NetworkBehaviour
 
         if (!CanAfford(cardCosts))
         {
-            ShowBuyFailedClientRpc("代币不足，无法购买这张卡。", BuildSingleTargetRpcParams(senderId));
+            ShowBuyFailedClientRpc("代币不足。", BuildSingleTargetRpcParams(senderId));
             return;
         }
 
-        if (BankManager.Instance == null)
-        {
-            ShowBuyFailedClientRpc("银行系统未初始化。", BuildSingleTargetRpcParams(senderId));
-            return;
-        }
-
-        // 1. 算出具体扣多少钱 (贪心策略)
+        // --- 开始结算 ---
         GameRules.CanAffordCard(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, cardCosts, out int goldNeeded);
 
         var currentTokens = Tokens.Value;
-        int[] actualPaid = new int[5];
         int[] playerGems = currentTokens.ToBaseGemArray();
         int[] playerDiscounts = Discounts.Value.ToBaseGemArray();
+        int[] actualPaid = new int[5];
 
         for (int i = 0; i < 5; i++)
         {
@@ -264,7 +211,7 @@ public class Player : NetworkBehaviour
             actualPaid[i] = Math.Min(actualCost, playerGems[i]);
         }
 
-        // 2. 扣除个人资产
+        // 1. 扣除代币
         currentTokens.White -= actualPaid[0];
         currentTokens.Blue -= actualPaid[1];
         currentTokens.Green -= actualPaid[2];
@@ -273,7 +220,7 @@ public class Player : NetworkBehaviour
         currentTokens.Gold -= goldNeeded;
         Tokens.Value = currentTokens;
 
-        // 3. 增加收益 (分数与折扣)
+        // 2. 增加分数与折扣
         Score.Value += card.points;
         var currentDiscounts = Discounts.Value;
         switch (card.bonusGem)
@@ -286,94 +233,50 @@ public class Player : NetworkBehaviour
         }
         Discounts.Value = currentDiscounts;
 
-        // 3.5 买卡后判定是否获得贵族(领主)
-        if (NobleManager.Instance != null)
-        {
-            NobleManager.Instance.TryGrantNobleToPlayer(this);
-        }
-
-        // 4. 银行入账
+        // 3. 银行入账
         BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
 
-        // 5. 【核心兼容】如果买的是预约的卡，从兜里移除；否则从市场移除
-        var currentReserved = Reserved.Value;
-        if (currentReserved.Slot1 == cardId || currentReserved.Slot2 == cardId || currentReserved.Slot3 == cardId)
+        // 4. 判定贵族
+        if (NobleManager.Instance != null) NobleManager.Instance.TryGrantNobleToPlayer(this);
+
+        // 5. 移除卡牌源
+        if (isReserved)
         {
-            currentReserved.RemoveCard(cardId);
-            Reserved.Value = currentReserved;
+            var res = Reserved.Value;
+            res.RemoveCard(cardId);
+            Reserved.Value = res;
         }
         else
         {
             GameEvents.OnServerCardBought?.Invoke(cardId);
         }
 
-        // 6. 推进状态机
-        if (Score.Value >= 15) Debug.Log("达成胜利条件！");
-        TurnManager.Instance.GoToNextTurn();
-    }
-
-    // 2. 接收银行的发钱广播
-    private void HandleServerTokensTaken(ulong playerId, int[] tokens)
-    {
-        // 银行是全服广播，咱们只收属于自己的钱
-        if (playerId != OwnerClientId) return;
-
-        var current = Tokens.Value;
-        current.White += tokens[0];
-        current.Blue += tokens[1];
-        current.Green += tokens[2];
-        current.Red += tokens[3];
-        current.Black += tokens[4];
-
-        Tokens.Value = current; // 赋值触发 NetworkVariable 同步
-
-        Debug.Log($"[Player] 银行发钱啦！玩家 {OwnerClientId} 资产已更新，回合结束。");
-
-        // 拿钱动作完成，强制推进状态机
-        // TurnManager.Instance.GoToNextTurn();
+        // 6. 终局判定与回合推进
+        if (Score.Value >= 15 && !TurnManager.Instance.IsLastRound.Value)
+        {
+            Debug.Log($"[Server] 玩家 {senderId} 达到 15 分，触发终局圈！");
+            TurnManager.Instance.IsLastRound.Value = true;
+        }
         TryEndTurn();
-    }
-
-    private void HandleServerTakeTokensFailed(ulong playerId, string reason)
-    {
-        if (playerId != OwnerClientId) return;
-        ShowTakeTokenFailedClientRpc(reason);
-    }
-    // 新增：玩家捏在手里的预约卡牌
-    public NetworkVariable<ReservedCards> Reserved = new NetworkVariable<ReservedCards>(
-        new ReservedCards { Slot1 = -1, Slot2 = -1, Slot3 = -1 },
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-    private void HandleReserveCardRequest(int cardId)
-    {
-        Debug.Log($"[Client] 拦截到 UI 预约点击，卡牌ID: {cardId}。呼叫服务器...");
-        ReserveCardServerRpc(cardId);
     }
 
     [ServerRpc(RequireOwnership = true)]
     private void ReserveCardServerRpc(int cardId, ServerRpcParams rpcParams = default)
     {
-        if (TurnManager.Instance.IsWaitingForReturn.Value) return; // 催债期间，全场静止！
         ulong senderId = rpcParams.Receive.SenderClientId;
-        if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
+        if (TurnManager.Instance.IsWaitingForReturn.Value || TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
 
         var currentReserved = Reserved.Value;
         if (currentReserved.TryAddCard(cardId))
         {
             Reserved.Value = currentReserved;
-
-            // 银行拿黄金
             if (BankManager.Instance.TryTakeGoldToken())
             {
                 var t = Tokens.Value;
                 t.Gold++;
                 Tokens.Value = t;
             }
-
-            // 通知市场销毁这张卡
             GameEvents.OnServerCardBought?.Invoke(cardId);
-            // TurnManager.Instance.GoToNextTurn();
             TryEndTurn();
         }
         else
@@ -381,98 +284,87 @@ public class Player : NetworkBehaviour
             GameEvents.OnShowWarningMsg?.Invoke("预约位已满！");
         }
     }
-    // ==========================================
-    // 回合结束校验器 (Server-Side)
-    // ==========================================
-    private void TryEndTurn()
-    {
-        if (!IsServer) return;
 
-        var t = Tokens.Value;
-        int totalTokens = t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
-
-        if (totalTokens > 10)
-        {
-
-            int overCount = totalTokens - 10;
-            Debug.Log($"[Server] 拦截！玩家 {OwnerClientId} 贪得无厌，代币数量 {totalTokens}/10。强制其归还 {overCount} 个。");
-            // 上锁！全局禁止任何操作！
-            TurnManager.Instance.IsWaitingForReturn.Value = true;
-
-            // 呼叫客户端弹窗。不用搞复杂的 TargetRpc，直接群发然后靠 IsOwner 本地拦截最稳
-            RequireReturnTokensClientRpc(overCount);
-        }
-        else
-        {
-            // 没超载，安全放行
-            TurnManager.Instance.GoToNextTurn();
-        }
-    }
-    // ==========================================
-    // 催债下发 (Server -> Client)
-    // ==========================================
-    [ClientRpc]
-    private void RequireReturnTokensClientRpc(int overCount)
-    {
-        // if (TurnManager.Instance.IsWaitingForReturn.Value) return; // 催债期间，全场静止！
-        // 铁律：只有闯祸的那个玩家的本地替身，才会触发本地 UI 弹窗
-        if (!IsOwner) return;
-
-        Debug.Log($"[Client] 收到服务器催债通知：我得还 {overCount} 个代币。");
-        // 呼叫 B 画的 UI 弹出一个强制还钱的面板
-        GameEvents.OnClientMustReturnTokens?.Invoke(overCount);
-    }
-
-    [ClientRpc]
-    private void ShowTakeTokenFailedClientRpc(string reason)
-    {
-        if (!IsOwner) return;
-        GameEvents.OnShowWarningMsg?.Invoke(reason);
-    }
-
-    [ClientRpc]
-    private void ShowBuyFailedClientRpc(string reason, ClientRpcParams clientRpcParams = default)
-    {
-        GameEvents.OnShowWarningMsg?.Invoke(reason);
-    }
-    // ==========================================
-    // 玩家还钱接收 (Client -> Server)
-    // ==========================================
     [ServerRpc(RequireOwnership = true)]
     private void ReturnTokensServerRpc(int[] returnedTokens, ServerRpcParams rpcParams = default)
     {
         ulong senderId = rpcParams.Receive.SenderClientId;
         if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
 
-        // 1. 扣除玩家上交的钱
         var current = Tokens.Value;
         current.White -= returnedTokens[0];
         current.Blue -= returnedTokens[1];
         current.Green -= returnedTokens[2];
         current.Red -= returnedTokens[3];
         current.Black -= returnedTokens[4];
-        // 如果你们允许还黄金，这里还得加上 current.Gold -= returnedTokens[5]; 
         Tokens.Value = current;
 
-        // 2. 把钱打回银行
-        BankManager.Instance.DepositTokens(returnedTokens, 0 /* 黄金数量，视你们规则而定 */);
-
-        Debug.Log($"[Server] 玩家 {senderId} 退还代币完毕，放行回合！");
-
-        // 3. 债务结清，强行推进状态机
-        // 解锁，放行！
+        BankManager.Instance.DepositTokens(returnedTokens, 0);
         TurnManager.Instance.IsWaitingForReturn.Value = false;
         TurnManager.Instance.GoToNextTurn();
     }
 
+    private void TryEndTurn()
+    {
+        if (!IsServer) return;
+        var t = Tokens.Value;
+        int total = t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
+
+        if (total > 10)
+        {
+            TurnManager.Instance.IsWaitingForReturn.Value = true;
+            RequireReturnTokensClientRpc(total - 10);
+        }
+        else
+        {
+            TurnManager.Instance.GoToNextTurn();
+        }
+    }
+
+    // ==========================================
+    // 事件监听与回调
+    // ==========================================
+    private void HandleServerTokensTaken(ulong playerId, int[] tokens)
+    {
+        if (playerId != OwnerClientId) return;
+        var current = Tokens.Value;
+        current.White += tokens[0];
+        current.Blue += tokens[1];
+        current.Green += tokens[2];
+        current.Red += tokens[3];
+        current.Black += tokens[4];
+        Tokens.Value = current;
+        TryEndTurn();
+    }
+
+    private void HandleServerTakeTokensFailed(ulong playerId, string reason)
+    {
+        if (playerId == OwnerClientId) ShowTakeTokenFailedClientRpc(reason);
+    }
+
+    // ==========================================
+    // ClientRpcs
+    // ==========================================
+    [ClientRpc]
+    private void RequireReturnTokensClientRpc(int overCount)
+    {
+        if (IsOwner) GameEvents.OnClientMustReturnTokens?.Invoke(overCount);
+    }
+
+    [ClientRpc]
+    private void ShowBuyFailedClientRpc(string reason, ClientRpcParams params_ = default)
+    {
+        if (IsOwner) GameEvents.OnShowWarningMsg?.Invoke(reason);
+    }
+
+    [ClientRpc]
+    private void ShowTakeTokenFailedClientRpc(string reason)
+    {
+        if (IsOwner) GameEvents.OnShowWarningMsg?.Invoke(reason);
+    }
+
     private static ClientRpcParams BuildSingleTargetRpcParams(ulong clientId)
     {
-        return new ClientRpcParams
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new[] { clientId }
-            }
-        };
+        return new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } };
     }
 }

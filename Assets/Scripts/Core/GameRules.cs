@@ -52,6 +52,7 @@ public static class GameRules
             int count = selectedTokens[i];
             
             if (count > 2) return false; // 绝不能拿超过 2 个一样的
+            if (count > bankRemaining[i]) return false; // 绝不能拿取超过银行实质剩余的数量
             
             if (count == 2)
             {

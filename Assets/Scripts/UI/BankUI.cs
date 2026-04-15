@@ -34,19 +34,30 @@ public class BankUI : MonoBehaviour
         if (remainingTokens != null)
         {
             remainingTokens.CopyTo(currentBankTokens, 0);
-
-            for (int i = 0; i < remainingTokens.Length && i < bankTokenTexts.Length; i++)
-            {
-                if (bankTokenTexts[i] != null)
-                {
-                    bankTokenTexts[i].text = remainingTokens[i].ToString();
-                }
-            }
         }
 
         if (bankGoldText != null)
         {
             bankGoldText.text = remainingGold.ToString();
+        }
+
+        // 调用独立的 UI 刷新方法，以此计算“扣除购物车”后的视觉虚数
+        RefreshBankUI();
+    }
+
+    /// <summary>
+    /// 只刷新页面上银行区域各面板的数字（银行真实库存 - 玩家购物车预选数量）
+    /// </summary>
+    private void RefreshBankUI()
+    {
+        for (int i = 0; i < currentBankTokens.Length && i < bankTokenTexts.Length; i++)
+        {
+            if (bankTokenTexts[i] != null)
+            {
+                // 核心逻辑：显示数量 = 老板柜台里的量 - 已经放在玩家购物车里的量
+                int displayCount = currentBankTokens[i] - selectedTokens[i];
+                bankTokenTexts[i].text = displayCount.ToString();
+            }
         }
     }
 
@@ -68,6 +79,7 @@ public class BankUI : MonoBehaviour
         }
 
         RefreshSelectedUI();
+        RefreshBankUI(); // 【新增】点这颗宝石时，除了购物车增加，银行的字也要实时变少
         UpdateConfirmButtonState();
     }
 
@@ -90,6 +102,7 @@ public class BankUI : MonoBehaviour
     {
         selectedTokens = new int[5];
         RefreshSelectedUI();
+        RefreshBankUI(); // 【新增】取消时/清空时，把之前扣掉的虚拟数字加回面板上
         UpdateConfirmButtonState();
     }
 
@@ -108,8 +121,29 @@ public class BankUI : MonoBehaviour
             if (count == 2) hasDouble = true;
         }
 
-        // 合法拿取整套提取条件：3个颜色各1个(无同色)，或2个同色
+        // 基础合法提取条件：3个颜色各1个(无同色)，或2个同色
         bool isCompleteDraft = (total == 3 && !hasDouble) || (total == 2 && hasDouble);
+
+        // 特殊规则修正：如果玩家拿异色的数量不足3个，但银行里确实已经没有别的颜色可以给他拿了，这也是合法的！
+        if (!isCompleteDraft && !hasDouble && total > 0 && total < 3)
+        {
+            int otherAvailableColors = 0;
+            for (int i = 0; i < 5; i++)
+            {
+                // 如果银行某款颜色还有货，且玩家的暂存区里还没拿它
+                if (currentBankTokens[i] > 0 && selectedTokens[i] == 0)
+                {
+                    otherAvailableColors++;
+                }
+            }
+
+            // 如果其他所有可选颜色都被拿光了，即玩家已经算是“尽力拿满能拿的所有异色”了，允许确认提交。
+            if (otherAvailableColors == 0)
+            {
+                isCompleteDraft = true;
+            }
+        }
+
         confirmButton.interactable = isCompleteDraft;
     }
 

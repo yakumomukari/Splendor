@@ -20,6 +20,8 @@ public class MarketDeckManager : NetworkBehaviour
 
     private const int FaceUpPerTier = 4;
 
+    private bool isMarketDirty = false;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -28,6 +30,15 @@ public class MarketDeckManager : NetworkBehaviour
             return;
         }
         Instance = this;
+    }
+
+    private void Update()
+    {
+        if (isMarketDirty)
+        {
+            RefreshMarketUIFromNetworkState();
+            isMarketDirty = false;
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -44,7 +55,7 @@ public class MarketDeckManager : NetworkBehaviour
             InitializeDecksAndMarket();
         }
 
-        RefreshMarketUIFromNetworkState();
+        isMarketDirty = true;
     }
 
     public override void OnNetworkDespawn()
@@ -160,7 +171,7 @@ public class MarketDeckManager : NetworkBehaviour
 
     private void OnVisibleListChanged(NetworkListEvent<int> _)
     {
-        RefreshMarketUIFromNetworkState();
+        isMarketDirty = true;
     }
 
     private void RefreshMarketUIFromNetworkState()

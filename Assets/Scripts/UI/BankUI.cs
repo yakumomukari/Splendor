@@ -34,19 +34,30 @@ public class BankUI : MonoBehaviour
         if (remainingTokens != null)
         {
             remainingTokens.CopyTo(currentBankTokens, 0);
-
-            for (int i = 0; i < remainingTokens.Length && i < bankTokenTexts.Length; i++)
-            {
-                if (bankTokenTexts[i] != null)
-                {
-                    bankTokenTexts[i].text = remainingTokens[i].ToString();
-                }
-            }
         }
 
         if (bankGoldText != null)
         {
             bankGoldText.text = remainingGold.ToString();
+        }
+
+        // 调用独立的 UI 刷新方法，以此计算“扣除购物车”后的视觉虚数
+        RefreshBankUI();
+    }
+
+    /// <summary>
+    /// 只刷新页面上银行区域各面板的数字（银行真实库存 - 玩家购物车预选数量）
+    /// </summary>
+    private void RefreshBankUI()
+    {
+        for (int i = 0; i < currentBankTokens.Length && i < bankTokenTexts.Length; i++)
+        {
+            if (bankTokenTexts[i] != null)
+            {
+                // 核心逻辑：显示数量 = 老板柜台里的量 - 已经放在玩家购物车里的量
+                int displayCount = currentBankTokens[i] - selectedTokens[i];
+                bankTokenTexts[i].text = displayCount.ToString();
+            }
         }
     }
 
@@ -68,6 +79,7 @@ public class BankUI : MonoBehaviour
         }
 
         RefreshSelectedUI();
+        RefreshBankUI(); // 【新增】点这颗宝石时，除了购物车增加，银行的字也要实时变少
         UpdateConfirmButtonState();
     }
 
@@ -90,6 +102,7 @@ public class BankUI : MonoBehaviour
     {
         selectedTokens = new int[5];
         RefreshSelectedUI();
+        RefreshBankUI(); // 【新增】取消时/清空时，把之前扣掉的虚拟数字加回面板上
         UpdateConfirmButtonState();
     }
 

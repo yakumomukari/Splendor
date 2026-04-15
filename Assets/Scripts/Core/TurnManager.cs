@@ -2,6 +2,7 @@ using Unity.Netcode;
 using UnityEngine;
 using System.Collections.Generic;
 
+[RequireComponent(typeof(NetworkObject))]
 public class TurnManager : NetworkBehaviour
 {
     // 单例，方便 A 的 BankManager 直接读状态拦截非法请求
@@ -29,6 +30,8 @@ public class TurnManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        Debug.Log($"[TurnManager] OnNetworkSpawn | IsServer={IsServer} IsClient={IsClient}");
+
         if (IsServer)
         {
             // 服务器启动时，订阅连接/断开事件

@@ -108,6 +108,14 @@ public class Player : NetworkBehaviour
                 Tokens.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(newVal.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), newVal.Gold, Score.Value);
                 Discounts.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), newVal.ToBaseGemArray(), Tokens.Value.Gold, Score.Value);
                 Score.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, newVal);
+
+                // 首次进房立即刷一次，避免UI显示空白。
+                localUI.UpdatePlayerUI(
+                    Tokens.Value.ToBaseGemArray(),
+                    Discounts.Value.ToBaseGemArray(),
+                    Tokens.Value.Gold,
+                    Score.Value
+                );
             }
 
             if (MarketManager.Instance != null) MarketManager.Instance.RegisterLocalPlayer(this);
@@ -141,8 +149,18 @@ public class Player : NetworkBehaviour
     // ==========================================
     private void HandleTakeTokensRequest(int[] requestedTokens)
     {
-        if (requestedTokens == null || requestedTokens.Length < 5) return;
-        if (BankManager.Instance == null) return;
+        if (requestedTokens == null || requestedTokens.Length < 5)
+        {
+            Debug.LogWarning("[Player-Client] 拿币请求参数非法。");
+            return;
+        }
+        if (BankManager.Instance == null)
+        {
+            Debug.LogWarning("[Player-Client] BankManager.Instance 为空，无法发起拿币请求。");
+            return;
+        }
+
+        Debug.Log($"[Player-Client] 发起拿币请求: W={requestedTokens[0]} B={requestedTokens[1]} G={requestedTokens[2]} R={requestedTokens[3]} K={requestedTokens[4]}");
 
         // UI顺序转银行顺序并发送请求
         BankManager.Instance.RequestTakeTokensServerRpc(requestedTokens[2], requestedTokens[1], requestedTokens[3], requestedTokens[0], requestedTokens[4]);
@@ -232,6 +250,8 @@ public class Player : NetworkBehaviour
             case GemType.Black: currentDiscounts.Black++; break;
         }
         Discounts.Value = currentDiscounts;
+        Debug.Log($"[Player-Server] 玩家 {senderId} 购买卡 {cardId}，获得 {card.bonusGem} 折扣。新折扣: W={currentDiscounts.White} B={currentDiscounts.Blue} G={currentDiscounts.Green} R={currentDiscounts.Red} K={currentDiscounts.Black}，分数: {Score.Value}");
+
 
         // 3. 银行入账
         BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
@@ -334,6 +354,7 @@ public class Player : NetworkBehaviour
         current.Red += tokens[3];
         current.Black += tokens[4];
         Tokens.Value = current;
+        Debug.Log($"[Player-Client] 收到服务器入账: +W{tokens[0]} +B{tokens[1]} +G{tokens[2]} +R{tokens[3]} +K{tokens[4]}");
         TryEndTurn();
     }
 

@@ -3,6 +3,10 @@ using UnityEngine;
 
 public class LocalUIDriver : MonoBehaviour
 {
+    [Header("运行模式")]
+    [Tooltip("仅用于本地离线UI联调。联机时请关闭。")]
+    public bool enableLocalSimulation = false;
+
     [Header("依赖绑定")]
     public MarketManager marketManager;
     public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
@@ -33,8 +37,27 @@ public class LocalUIDriver : MonoBehaviour
     private int deck2Count = 10;
     private int deck3Count = 10;
 
+    private bool runtimeEnabled;
+
     private void Start()
     {
+        bool networkActive = Unity.Netcode.NetworkManager.Singleton != null
+            && (Unity.Netcode.NetworkManager.Singleton.IsClient || Unity.Netcode.NetworkManager.Singleton.IsServer);
+
+        runtimeEnabled = enableLocalSimulation && !networkActive;
+        if (!runtimeEnabled)
+        {
+            if (!enableLocalSimulation)
+            {
+                Debug.Log("[LocalUIDriver] 本地模拟已关闭，不会接管UI与经济逻辑。");
+            }
+            else
+            {
+                Debug.LogWarning("[LocalUIDriver] 检测到联机会话，已自动停用本地模拟，避免覆盖服务器同步数据。");
+            }
+            return;
+        }
+
         // 提取前 12 张卡作为初始市场
         for (int i = 0; i < 12 && i < testDeck.Count; i++)
         {
@@ -63,6 +86,8 @@ public class LocalUIDriver : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (!runtimeEnabled) return;
+
         // 销毁时注销事件，防止内存泄漏
         GameEvents.OnBuyCardReq -= HandleBuyCardRequest;
         GameEvents.OnTakeTokensReq -= HandleTakeTokens;
@@ -70,6 +95,8 @@ public class LocalUIDriver : MonoBehaviour
 
     private void Update()
     {
+        if (!runtimeEnabled) return;
+
         bool dataChanged = false;
 
         // 键盘 1-5 分别增加 白、蓝、绿、红、黑 代币 (模拟作弊获取并扣掉银行的量)

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
+[RequireComponent(typeof(NetworkObject))]
 public class MarketDeckManager : NetworkBehaviour
 {
     public static MarketDeckManager Instance { get; private set; }
@@ -31,6 +32,8 @@ public class MarketDeckManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        Debug.Log($"[MarketDeck] OnNetworkSpawn | IsServer={IsServer} IsClient={IsClient} IsOwner={IsOwner}");
+
         Tier1VisibleIds.OnListChanged += OnVisibleListChanged;
         Tier2VisibleIds.OnListChanged += OnVisibleListChanged;
         Tier3VisibleIds.OnListChanged += OnVisibleListChanged;
@@ -171,6 +174,9 @@ public class MarketDeckManager : NetworkBehaviour
         AppendCards(cards, Tier1VisibleIds);
         AppendCards(cards, Tier2VisibleIds);
         AppendCards(cards, Tier3VisibleIds);
+
+        // [DEBUG] 服务器发送数据给客户端的确认日志
+        Debug.Log($"[MarketDeck] 刷新市场UI: T1={Tier1VisibleIds.Count}张卡 (库存剩{Tier1DeckRemaining.Value}), T2={Tier2VisibleIds.Count}张卡 (库存剩{Tier2DeckRemaining.Value}), T3={Tier3VisibleIds.Count}张卡 (库存剩{Tier3DeckRemaining.Value})");
 
         MarketManager.Instance.UpdateMarket(
             cards,

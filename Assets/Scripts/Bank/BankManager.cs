@@ -2,6 +2,7 @@ using Unity.Netcode;
 using UnityEngine;
 
 
+[RequireComponent(typeof(NetworkObject))]
 public class BankManager : NetworkBehaviour
 {
     public static BankManager Instance { get; private set; }
@@ -21,6 +22,8 @@ public class BankManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        Debug.Log($"[Bank] OnNetworkSpawn | IsServer={IsServer} IsClient={IsClient}");
+
         if (!IsServer) return;
 
         int playerCount = NetworkManager.Singleton != null

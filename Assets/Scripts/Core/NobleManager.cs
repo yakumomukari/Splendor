@@ -1,7 +1,11 @@
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
+[RequireComponent(typeof(NetworkObject))]
 public class NobleManager : NetworkBehaviour
 {
     public static NobleManager Instance { get; private set; }
@@ -22,6 +26,29 @@ public class NobleManager : NetworkBehaviour
         }
         Instance = this;
 
+        LoadNobles();
+    }
+
+    private void LoadNobles()
+    {
+#if UNITY_EDITOR
+        // 编辑器模式：从 Assets/Settings/Nobles 加载
+        string[] guids = AssetDatabase.FindAssets("t:NobleSO", new[] { "Assets/Settings/Nobles" });
+        foreach (var guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            NobleSO noble = AssetDatabase.LoadAssetAtPath<NobleSO>(path);
+            if (noble == null) continue;
+            if (idToNoble.ContainsKey(noble.id))
+            {
+                Debug.LogError($"[Noble] 贵族ID重复: {noble.id}");
+                continue;
+            }
+            idToNoble.Add(noble.id, noble);
+        }
+        Debug.Log($"[Noble] 编辑器模式加载：共加载 {idToNoble.Count} 个贵族");
+#else
+        // 运行时模式：从 Resources/Nobles 加载
         NobleSO[] all = Resources.LoadAll<NobleSO>("Nobles");
         foreach (var noble in all)
         {
@@ -33,10 +60,14 @@ public class NobleManager : NetworkBehaviour
             }
             idToNoble.Add(noble.id, noble);
         }
+        Debug.Log($"[Noble] 运行时模式加载：共加载 {idToNoble.Count} 个贵族");
+#endif
     }
 
     public override void OnNetworkSpawn()
     {
+        Debug.Log($"[Noble] OnNetworkSpawn | IsServer={IsServer} IsClient={IsClient} LoadedNobles={idToNoble.Count}");
+
         if (!IsServer) return;
         InitializeFaceUpNobles();
     }
@@ -54,7 +85,13 @@ public class NobleManager : NetworkBehaviour
             FaceUpNobleIds.Add(ids[i]);
         }
 
-        Debug.Log($"[Noble] 明置贵族初始化完成，数量: {FaceUpNobleIds.Count}");
+            string nobleIdStr = "";
+            for (int i = 0; i < FaceUpNobleIds.Count; i++)
+            {
+                if (i > 0) nobleIdStr += ", ";
+                nobleIdStr += FaceUpNobleIds[i];
+            }
+            Debug.Log($"[Noble-Server] 明置贵族初始化完成，从 {idToNoble.Count} 个贵族中随机选择 {take} 个，分别是: {nobleIdStr}");
     }
 
     public void TryGrantNobleToPlayer(Player player)

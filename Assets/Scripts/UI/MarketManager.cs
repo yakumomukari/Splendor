@@ -91,6 +91,28 @@ public class MarketManager : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+        
+        TryAutoFindDeckUIs();
+    }
+
+    private void TryAutoFindDeckUIs()
+    {
+        // 如果 DeckUI 没有在编辑器中绑定，尝试从子物体自动查找
+        if (deckUI_T1 == null || deckUI_T2 == null || deckUI_T3 == null)
+        {
+            DeckUI[] deckUIs = GetComponentsInChildren<DeckUI>();
+            if (deckUIs.Length >= 3)
+            {
+                if (deckUI_T1 == null) deckUI_T1 = deckUIs[0];
+                if (deckUI_T2 == null) deckUI_T2 = deckUIs[1];
+                if (deckUI_T3 == null) deckUI_T3 = deckUIs[2];
+                Debug.Log("[MarketManager] 自动查找 DeckUI 完成");
+            }
+            else if (deckUIs.Length > 0)
+            {
+                Debug.LogWarning($"[MarketManager] DeckUI 数量不足，期望 3 个，实际 {deckUIs.Length}");
+            }
+        }
     }
 
     private void OnEnable()

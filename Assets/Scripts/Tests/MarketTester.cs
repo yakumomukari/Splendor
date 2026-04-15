@@ -6,6 +6,7 @@ public class LocalUIDriver : MonoBehaviour
     [Header("依赖绑定")]
     public MarketManager marketManager;
     public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
+    public BankUI bankUI;           // 挂载刚做好的银行代币面板
     
     [Header("测试数据源")]
     public List<CardSO> testDeck; // 请在 Inspector 中随意拖入 15-20 张卡牌 SO
@@ -18,6 +19,10 @@ public class LocalUIDriver : MonoBehaviour
     private int playerGold = 0;
     private int playerScore = 0;
 
+    // 模拟的银行数据
+    private int[] bankTokens = new int[5] { 7, 7, 7, 7, 7 };
+    private int bankGold = 5;
+
     private void Start()
     {
         // 提取前 12 张卡作为初始市场
@@ -26,11 +31,13 @@ public class LocalUIDriver : MonoBehaviour
             activeCards.Add(testDeck[i]);
         }
 
-        // 注册全局购买请求事件
+        // 注册全局事件
         GameEvents.OnBuyCardReq += HandleBuyCardRequest;
+        GameEvents.OnTakeTokensReq += HandleTakeTokens;
 
         RefreshMarket();
         RefreshPlayerPanel();
+        RefreshBankPanel();
         PrintCurrentAssets();
     }
 
@@ -38,28 +45,34 @@ public class LocalUIDriver : MonoBehaviour
     {
         // 销毁时注销事件，防止内存泄漏
         GameEvents.OnBuyCardReq -= HandleBuyCardRequest;
+        GameEvents.OnTakeTokensReq -= HandleTakeTokens;
     }
 
     private void Update()
     {
         bool dataChanged = false;
 
-        // 键盘 1-5 分别增加 白、蓝、绿、红、黑 代币
-        if (Input.GetKeyDown(KeyCode.Alpha1)) { playerTokens[0]++; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha2)) { playerTokens[1]++; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha3)) { playerTokens[2]++; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha4)) { playerTokens[3]++; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha5)) { playerTokens[4]++; dataChanged = true; }
+        // 键盘 1-5 分别增加 白、蓝、绿、红、黑 代币 (模拟作弊获取并扣掉银行的量)
+        if (Input.GetKeyDown(KeyCode.Alpha1) && bankTokens[0] > 0) { playerTokens[0]++; bankTokens[0]--; dataChanged = true; }
+        if (Input.GetKeyDown(KeyCode.Alpha2) && bankTokens[1] > 0) { playerTokens[1]++; bankTokens[1]--; dataChanged = true; }
+        if (Input.GetKeyDown(KeyCode.Alpha3) && bankTokens[2] > 0) { playerTokens[2]++; bankTokens[2]--; dataChanged = true; }
+        if (Input.GetKeyDown(KeyCode.Alpha4) && bankTokens[3] > 0) { playerTokens[3]++; bankTokens[3]--; dataChanged = true; }
+        if (Input.GetKeyDown(KeyCode.Alpha5) && bankTokens[4] > 0) { playerTokens[4]++; bankTokens[4]--; dataChanged = true; }
         
         // 键盘 G 增加黄金
-        if (Input.GetKeyDown(KeyCode.G)) { playerGold++; dataChanged = true; }
+        if (Input.GetKeyDown(KeyCode.G) && bankGold > 0) { playerGold++; bankGold--; dataChanged = true; }
         
-        // 键盘 C 清空资产
+        // 键盘 C 清空资产，并退还给银行
         if (Input.GetKeyDown(KeyCode.C))
         {
-            playerTokens = new int[5];
+            for(int i = 0; i < 5; i++)
+            {
+                bankTokens[i] += playerTokens[i];
+                playerTokens[i] = 0;
+                playerDiscounts[i] = 0;
+            }
+            bankGold += playerGold;
             playerGold = 0;
-            playerDiscounts = new int[5];
             playerScore = 0;
             dataChanged = true;
         }
@@ -69,6 +82,7 @@ public class LocalUIDriver : MonoBehaviour
             PrintCurrentAssets();
             RefreshMarket();
             RefreshPlayerPanel();
+            RefreshBankPanel();
         }
     }
 
@@ -77,6 +91,31 @@ public class LocalUIDriver : MonoBehaviour
         // 调用 MarketManager 的接口刷新排版与交互状态
         marketManager.UpdateMarket(activeCards);
         marketManager.SetMarketInteractable(playerTokens, playerDiscounts, playerGold);
+    }
+
+    private void HandleTakeTokens(int[] tokens)
+    {
+        Debug.Log("[UI事件拦截] 玩家确认拿取代币: 白:" + tokens[0] + " 蓝:" + tokens[1] + " 绿:" + tokens[2] + " 红:" + tokens[3] + " 黑:" + tokens[4]);
+
+        // 再做一次合法性校验（这是服务器本该做的事）
+        if (!GameRules.IsValidTokenDraft(tokens, bankTokens))
+        {
+            Debug.LogWarning("[系统模拟] 拿取代币请求不合法！可能是同色时库存不足或者总数作弊。");
+            return;
+        }
+
+        // 进行扣费和装兜处理
+        for (int i = 0; i < 5; i++)
+        {
+            bankTokens[i] -= tokens[i];
+            playerTokens[i] += tokens[i];
+        }
+
+        // 交易完成后再次刷新 UI 与 输出
+        PrintCurrentAssets();
+        RefreshMarket();
+        RefreshPlayerPanel();
+        RefreshBankPanel();
     }
 
     private void HandleBuyCardRequest(int cardId)
@@ -97,15 +136,19 @@ public class LocalUIDriver : MonoBehaviour
             // 【双重校验】模拟服务器扣除代币逻辑
             if (GameRules.CanAffordCard(playerTokens, playerDiscounts, playerGold, cardCosts, out int goldNeeded))
             {
-                // 扣除相应代币
+                // 扣除相应代币并将其【退还给银行区】
                 for (int i = 0; i < 5; i++)
                 {
                     int actualCost = Mathf.Max(0, cardCosts[i] - playerDiscounts[i]);
                     int tokenCost = Mathf.Min(actualCost, playerTokens[i]); // 优先扣除普通代币
+                    
                     playerTokens[i] -= tokenCost;
+                    bankTokens[i] += tokenCost; // 【系统模拟】花出去的钱回到公共货币池
                 }
-                // 扣除黄金
+                
+                // 扣除黄金并退还
                 playerGold -= goldNeeded;
+                bankGold += goldNeeded;
                 
                 // 增加玩家的永久折扣 (假设黄金不会作为折扣产出)
                 if ((int)targetCard.bonusGem < 5)
@@ -144,6 +187,7 @@ public class LocalUIDriver : MonoBehaviour
         PrintCurrentAssets();
         RefreshMarket();
         RefreshPlayerPanel();
+        RefreshBankPanel();
     }
 
     private void RefreshPlayerPanel()
@@ -151,6 +195,14 @@ public class LocalUIDriver : MonoBehaviour
         if (playerPanel != null)
         {
             playerPanel.UpdatePlayerUI(playerTokens, playerDiscounts, playerGold, playerScore);
+        }
+    }
+
+    private void RefreshBankPanel()
+    {
+        if (bankUI != null)
+        {
+            bankUI.UpdateBank(bankTokens, bankGold);
         }
     }
 

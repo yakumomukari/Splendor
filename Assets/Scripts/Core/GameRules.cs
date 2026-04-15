@@ -36,4 +36,36 @@ public static class GameRules
         // 如果黄金储备 >= 总缺口，说明玩家可以通过花费黄金来补足欠缺的宝石
         return playerGold >= goldNeeded;
     }
+
+    /// <summary>
+    /// 校验玩家拿取代币的操作是否合法 (预判阶段)
+    /// </summary>
+    public static bool IsValidTokenDraft(int[] selectedTokens, int[] bankRemaining)
+    {
+        if (selectedTokens.Length != 5 || bankRemaining.Length != 5) return false;
+
+        int total = 0;
+        bool hasDouble = false;
+
+        for (int i = 0; i < 5; i++)
+        {
+            int count = selectedTokens[i];
+            
+            if (count > 2) return false; // 绝不能拿超过 2 个一样的
+            
+            if (count == 2)
+            {
+                hasDouble = true;
+                // 拿 2 个相同色的前提是：被拿取前银行该颜色的剩余量 >= 4
+                if (bankRemaining[i] < 4) return false;
+            }
+            
+            total += count;
+        }
+
+        if (total > 3) return false; // 总数最多不允许超过 3 个
+        if (hasDouble && total > 2) return false; // 如果已经拿了 2 个同色，不能再拿其它的（即总数只能为 2）
+
+        return true;
+    }
 }

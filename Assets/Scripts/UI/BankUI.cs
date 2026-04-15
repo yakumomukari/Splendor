@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 public class BankUI : MonoBehaviour
@@ -10,13 +11,18 @@ public class BankUI : MonoBehaviour
     [Header("玩家暂存区 (顺序: 白,蓝,绿,红,黑)")]
     public TextMeshProUGUI[] selectedTokenTexts = new TextMeshProUGUI[5];
     
+    [Header("UI 控件")]
+    public Button confirmButton;
+
     // 玩家当前选中的代币
     private int[] selectedTokens = new int[5];
+    // 缓存的银行当前存量，用于合法性校验
+    private int[] currentBankTokens = new int[5];
 
     private void Start()
     {
-        // 初始化刷新暂存区显示
-        RefreshSelectedUI();
+        // 初始化刷新暂存区及按钮默认状态
+        ClearSelection();
     }
 
     /// <summary>
@@ -27,6 +33,8 @@ public class BankUI : MonoBehaviour
     {
         if (remainingTokens != null)
         {
+            remainingTokens.CopyTo(currentBankTokens, 0);
+
             for (int i = 0; i < remainingTokens.Length && i < bankTokenTexts.Length; i++)
             {
                 if (bankTokenTexts[i] != null)
@@ -49,11 +57,18 @@ public class BankUI : MonoBehaviour
     {
         if (colorIndex < 0 || colorIndex >= 5) return;
 
-        // 【注意】这里只做纯粹的UI暂存点击收集。
-        // 关于“不能拿超过3个不同色”、“不能拿超过2个相同色”、“存量不足4个不能拿两颗同色”的严密判断，
-        // 应该放到网络端由服务器权威防作弊计算，UI 只负责组织成意图发送。
+        // 以前纯发意图的做法现在升级加入了【客户端预判】，过滤非法拼装提高体验
         selectedTokens[colorIndex]++;
+        
+        if (!GameRules.IsValidTokenDraft(selectedTokens, currentBankTokens))
+        {
+            // 校验不通过：这颗拿得不合法，把它退回去
+            selectedTokens[colorIndex]--;
+            return;
+        }
+
         RefreshSelectedUI();
+        UpdateConfirmButtonState();
     }
 
     /// <summary>
@@ -75,6 +90,27 @@ public class BankUI : MonoBehaviour
     {
         selectedTokens = new int[5];
         RefreshSelectedUI();
+        UpdateConfirmButtonState();
+    }
+
+    /// <summary>
+    /// 根据当前预选篮子，更新确认按钮的状态
+    /// </summary>
+    private void UpdateConfirmButtonState()
+    {
+        if (confirmButton == null) return;
+
+        int total = 0;
+        bool hasDouble = false;
+        foreach (int count in selectedTokens)
+        {
+            total += count;
+            if (count == 2) hasDouble = true;
+        }
+
+        // 合法拿取整套提取条件：3个颜色各1个(无同色)，或2个同色
+        bool isCompleteDraft = (total == 3 && !hasDouble) || (total == 2 && hasDouble);
+        confirmButton.interactable = isCompleteDraft;
     }
 
     /// <summary>

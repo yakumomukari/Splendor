@@ -1,11 +1,5 @@
 {
   "dependencies": {
-    "com.community.netcode.transport.websocket": {
-      "version": "file:E:/unity/extension/Transports/com.community.netcode.transport.websocket",
-      "depth": 0,
-      "source": "local",
-      "dependencies": {}
-    },
     "com.unity.2d.animation": {
       "version": "9.2.0",
       "depth": 1,

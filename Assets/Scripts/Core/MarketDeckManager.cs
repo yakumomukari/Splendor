@@ -7,9 +7,9 @@ public class MarketDeckManager : NetworkBehaviour
 {
     public static MarketDeckManager Instance { get; private set; }
 
-    public readonly NetworkList<int> Tier1VisibleIds = new NetworkList<int>();
-    public readonly NetworkList<int> Tier2VisibleIds = new NetworkList<int>();
-    public readonly NetworkList<int> Tier3VisibleIds = new NetworkList<int>();
+    public NetworkList<int> Tier1VisibleIds;
+    public NetworkList<int> Tier2VisibleIds;
+    public NetworkList<int> Tier3VisibleIds;
     public NetworkVariable<int> Tier1DeckRemaining = new NetworkVariable<int>(0);
     public NetworkVariable<int> Tier2DeckRemaining = new NetworkVariable<int>(0);
     public NetworkVariable<int> Tier3DeckRemaining = new NetworkVariable<int>(0);
@@ -28,6 +28,11 @@ public class MarketDeckManager : NetworkBehaviour
             return;
         }
         Instance = this;
+
+        // 只有当物体真正被实例化进场景时，才向操作系统要内存
+        Tier1VisibleIds = new NetworkList<int>();
+        Tier2VisibleIds = new NetworkList<int>();
+        Tier3VisibleIds = new NetworkList<int>();
     }
 
     public override void OnNetworkSpawn()
@@ -211,5 +216,14 @@ public class MarketDeckManager : NetworkBehaviour
         }
 
         return false;
+    }
+    public override void OnDestroy()
+    {
+        // NetworkList 是个 Class，直接判 null 然后无脑 Dispose
+        if (Tier1VisibleIds != null) Tier1VisibleIds.Dispose();
+        if (Tier2VisibleIds != null) Tier2VisibleIds.Dispose();
+        if (Tier3VisibleIds != null) Tier3VisibleIds.Dispose();
+
+        base.OnDestroy(); // 必须保留
     }
 }

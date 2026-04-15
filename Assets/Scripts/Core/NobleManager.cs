@@ -13,7 +13,8 @@ public class NobleManager : NetworkBehaviour
     [Header("开局明置贵族数量")]
     [SerializeField] private int initialFaceUpCount = 3;
 
-    public readonly NetworkList<int> FaceUpNobleIds = new NetworkList<int>();
+    // 删掉 readonly 和 = new ...
+    public NetworkList<int> FaceUpNobleIds;
 
     private readonly Dictionary<int, NobleSO> idToNoble = new Dictionary<int, NobleSO>();
 
@@ -25,6 +26,9 @@ public class NobleManager : NetworkBehaviour
             return;
         }
         Instance = this;
+
+        // 核心补丁：只有预制体真正进入场景时，才分配非托管内存
+        FaceUpNobleIds = new NetworkList<int>();
 
         LoadNobles();
     }
@@ -85,13 +89,13 @@ public class NobleManager : NetworkBehaviour
             FaceUpNobleIds.Add(ids[i]);
         }
 
-            string nobleIdStr = "";
-            for (int i = 0; i < FaceUpNobleIds.Count; i++)
-            {
-                if (i > 0) nobleIdStr += ", ";
-                nobleIdStr += FaceUpNobleIds[i];
-            }
-            Debug.Log($"[Noble-Server] 明置贵族初始化完成，从 {idToNoble.Count} 个贵族中随机选择 {take} 个，分别是: {nobleIdStr}");
+        string nobleIdStr = "";
+        for (int i = 0; i < FaceUpNobleIds.Count; i++)
+        {
+            if (i > 0) nobleIdStr += ", ";
+            nobleIdStr += FaceUpNobleIds[i];
+        }
+        Debug.Log($"[Noble-Server] 明置贵族初始化完成，从 {idToNoble.Count} 个贵族中随机选择 {take} 个，分别是: {nobleIdStr}");
     }
 
     public void TryGrantNobleToPlayer(Player player)
@@ -174,5 +178,15 @@ public class NobleManager : NetworkBehaviour
             ids[i] = ids[j];
             ids[j] = t;
         }
+    }
+    public override void OnDestroy()
+    {
+        // 游戏结束或物体销毁时，手动把这块非托管内存还给操作系统
+        if (FaceUpNobleIds != null)
+        {
+            FaceUpNobleIds.Dispose();
+        }
+
+        base.OnDestroy(); // 千万别忘了基类调用
     }
 }

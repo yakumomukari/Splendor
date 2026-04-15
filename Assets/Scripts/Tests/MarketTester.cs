@@ -8,6 +8,11 @@ public class LocalUIDriver : MonoBehaviour
     public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
     public BankUI bankUI;           // 挂载刚做好的银行代币面板
     
+    [Header("贵族测试")]
+    public Transform nobleContainer;   // 贵族UI的父节点容器 (NoblePanel_Prefab 本身)
+    public NobleItemUI noblePrefab;    // 刚刚做好的贵族单体预制体
+    public List<NobleSO> testNobles;   // 请随意拖入几个刚刚生成的贵族SO
+
     [Header("测试数据源")]
     public List<CardSO> testDeck; // 请在 Inspector 中随意拖入 15-20 张卡牌 SO
 
@@ -34,6 +39,16 @@ public class LocalUIDriver : MonoBehaviour
         for (int i = 0; i < 12 && i < testDeck.Count; i++)
         {
             activeCards.Add(testDeck[i]);
+        }
+
+        // 初始化测试贵族 (随机抽 3 个展示)
+        if (nobleContainer != null && noblePrefab != null && testNobles != null)
+        {
+            for (int i = 0; i < 3 && i < testNobles.Count; i++)
+            {
+                NobleItemUI newNoble = Instantiate(noblePrefab, nobleContainer);
+                newNoble.Setup(testNobles[i]);
+            }
         }
 
         // 注册全局事件

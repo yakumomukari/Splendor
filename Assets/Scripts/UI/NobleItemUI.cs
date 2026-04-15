@@ -35,6 +35,14 @@ public class NobleItemUI : MonoBehaviour
         TextMeshProUGUI t = requirementTexts[index];
         if (t == null) return;
 
-        t.text = value.ToString();
+        if (value > 0)
+        {
+            t.gameObject.SetActive(true);
+            t.text = value.ToString();
+        }
+        else
+        {
+            t.gameObject.SetActive(false); // 隐藏不需要的宝石颜色，保持 UI 干净
+        }
     }
 }

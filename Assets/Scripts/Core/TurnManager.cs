@@ -22,6 +22,11 @@ public class TurnManager : NetworkBehaviour
     public NetworkVariable<bool> IsWaitingForReturn = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     // 【新增】终局标志位
     public NetworkVariable<bool> IsLastRound = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    [Header("开发测试：凑齐几个人自动开局？")]
+    public int playersNeededToStart = 1; // 测试时设为2，打局时设为4
+
+    private bool gameHasStarted = false;
     private void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);
@@ -56,12 +61,28 @@ public class TurnManager : NetworkBehaviour
     }
 
     // 有人连进来了，拉入座位表
+    // 修改你的 OnClientConnected，加入发令枪逻辑
     private void OnClientConnected(ulong clientId)
     {
+        // 如果游戏已经开始了，这人就是中途乱入的观战者，别加进座位表！
+        if (gameHasStarted) return;
+
         if (!playerOrder.Contains(clientId))
         {
             playerOrder.Add(clientId);
             Debug.Log($"[TurnManager] 玩家 {clientId} 加入，当前总人数: {playerOrder.Count}");
+
+            // 凑齐人数，自动发车！
+            if (playerOrder.Count >= playersNeededToStart)
+            {
+                gameHasStarted = true;
+                Debug.Log("[TurnManager] 人数凑齐，正式开局！下发 UI 座位表！");
+
+                // 1. 把顺序转成数组发给所有客户端去构建 UI
+                InitializeUIClientRpc(playerOrder.ToArray());
+
+                // 2. 顺便让 A 组的银行或者市场发牌机也在这里完成初始化（如果有的话）
+            }
         }
     }
 
@@ -79,6 +100,15 @@ public class TurnManager : NetworkBehaviour
             // 确保切给原本坐在他后面的那个人
             int nextIndex = disconnectIndex % playerOrder.Count;
             CurrentActivePlayerId.Value = playerOrder[nextIndex];
+        }
+    }
+    // 全服广播：强行唤醒客户端的 UI 管家
+    [ClientRpc]
+    private void InitializeUIClientRpc(ulong[] orderArray)
+    {
+        if (PlayerUIManager.Instance != null)
+        {
+            PlayerUIManager.Instance.BuildLayout(new List<ulong>(orderArray));
         }
     }
 

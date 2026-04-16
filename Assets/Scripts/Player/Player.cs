@@ -76,6 +76,9 @@ public class Player : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    // 缓存当前实体绑定的 UI 面板引用
+    private PlayerPanel myBoundUI;
+
     // ==========================================
     // 逻辑判定
     // ==========================================
@@ -95,6 +98,23 @@ public class Player : NetworkBehaviour
     // ==========================================
     public override void OnNetworkSpawn()
     {
+        // 1. 全员绑定 UI (解耦数据刷新，不再受 IsOwner 限制)
+        if (PlayerUIManager.Instance != null)
+        {
+            myBoundUI = PlayerUIManager.Instance.GetPanelByClientId(OwnerClientId);
+            if (myBoundUI != null)
+            {
+                // 把委托抽出来方便后面 -= 注销防内存泄露
+                Tokens.OnValueChanged += OnTokensChanged;
+                Discounts.OnValueChanged += OnDiscountsChanged;
+                Score.OnValueChanged += OnScoreChanged;
+
+                // 首次推数据，确保中途加入的玩家也能看到正确数值
+                RefreshUI();
+            }
+        }
+
+        // 2. 本地权限控制 (仅自己的身体能发请求、注册本地交互)
         if (IsOwner)
         {
             GameEvents.OnTakeTokensReq += HandleTakeTokensRequest;
@@ -102,25 +122,10 @@ public class Player : NetworkBehaviour
             GameEvents.OnReserveCardReq += HandleReserveCardRequest;
             GameEvents.OnReturnTokensReq += HandleReturnTokens;
 
-            PlayerPanel localUI = FindObjectOfType<PlayerPanel>();
-            if (localUI != null)
-            {
-                Tokens.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(newVal.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), newVal.Gold, Score.Value);
-                Discounts.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), newVal.ToBaseGemArray(), Tokens.Value.Gold, Score.Value);
-                Score.OnValueChanged += (oldVal, newVal) => localUI.UpdatePlayerUI(Tokens.Value.ToBaseGemArray(), Discounts.Value.ToBaseGemArray(), Tokens.Value.Gold, newVal);
-
-                // 首次进房立即刷一次，避免UI显示空白。
-                localUI.UpdatePlayerUI(
-                    Tokens.Value.ToBaseGemArray(),
-                    Discounts.Value.ToBaseGemArray(),
-                    Tokens.Value.Gold,
-                    Score.Value
-                );
-            }
-
             if (MarketManager.Instance != null) MarketManager.Instance.RegisterLocalPlayer(this);
         }
 
+        // 3. 服务器端监听 (处理结算等核心广播)
         if (IsServer)
         {
             GameEvents.OnServerTokensTaken += HandleServerTokensTaken;
@@ -130,6 +135,17 @@ public class Player : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        // 拔掉数据线防泄露
+        if (myBoundUI != null)
+        {
+            Tokens.OnValueChanged -= OnTokensChanged;
+            Discounts.OnValueChanged -= OnDiscountsChanged;
+            Score.OnValueChanged -= OnScoreChanged;
+
+            // 物理销毁：如果有人退房了，顺手把他留在屏幕上的 UI 扬了 (除了自己)
+            if (!IsOwner) Destroy(myBoundUI.gameObject);
+        }
+
         if (IsOwner)
         {
             GameEvents.OnTakeTokensReq -= HandleTakeTokensRequest;
@@ -137,10 +153,31 @@ public class Player : NetworkBehaviour
             GameEvents.OnReserveCardReq -= HandleReserveCardRequest;
             GameEvents.OnReturnTokensReq -= HandleReturnTokens;
         }
+
         if (IsServer)
         {
             GameEvents.OnServerTokensTaken -= HandleServerTokensTaken;
             GameEvents.OnServerTakeTokensFailed -= HandleServerTakeTokensFailed;
+        }
+    }
+
+    // ==========================================
+    // UI 数据刷新回调
+    // ==========================================
+    private void OnTokensChanged(TokenAssets oldVal, TokenAssets newVal) => RefreshUI();
+    private void OnDiscountsChanged(TokenAssets oldVal, TokenAssets newVal) => RefreshUI();
+    private void OnScoreChanged(int oldVal, int newVal) => RefreshUI();
+
+    private void RefreshUI()
+    {
+        if (myBoundUI != null)
+        {
+            myBoundUI.UpdatePlayerUI(
+                Tokens.Value.ToBaseGemArray(),
+                Discounts.Value.ToBaseGemArray(),
+                Tokens.Value.Gold,
+                Score.Value
+            );
         }
     }
 
@@ -173,7 +210,6 @@ public class Player : NetworkBehaviour
     // ==========================================
     // 服务器核心逻辑 (RPCs)
     // ==========================================
-
     [ServerRpc(RequireOwnership = true)]
     private void BuyCardServerRpc(int cardId, ServerRpcParams rpcParams = default)
     {
@@ -200,7 +236,7 @@ public class Player : NetworkBehaviour
         // 区域检查：是否在预约位或市场可见
         bool isReserved = Reserved.Value.Slot1 == cardId || Reserved.Value.Slot2 == cardId || Reserved.Value.Slot3 == cardId;
         bool isVisible = MarketDeckManager.Instance != null && MarketDeckManager.Instance.IsCardVisible(cardId);
-        
+
         if (!isReserved && !isVisible)
         {
             ShowBuyFailedClientRpc("卡牌已不在购买区。", BuildSingleTargetRpcParams(senderId));
@@ -251,7 +287,6 @@ public class Player : NetworkBehaviour
         }
         Discounts.Value = currentDiscounts;
         Debug.Log($"[Player-Server] 玩家 {senderId} 购买卡 {cardId}，获得 {card.bonusGem} 折扣。新折扣: W={currentDiscounts.White} B={currentDiscounts.Blue} G={currentDiscounts.Green} R={currentDiscounts.Red} K={currentDiscounts.Black}，分数: {Score.Value}");
-
 
         // 3. 银行入账
         BankManager.Instance.DepositTokens(actualPaid, goldNeeded);
@@ -346,7 +381,10 @@ public class Player : NetworkBehaviour
     // ==========================================
     private void HandleServerTokensTaken(ulong playerId, int[] tokens)
     {
+        // 现在底层数据会自动广播触发 OnTokensChanged 刷新所有人的 UI，
+        // 这里只是为了自己入账和切回合用。
         if (playerId != OwnerClientId) return;
+
         var current = Tokens.Value;
         current.White += tokens[0];
         current.Blue += tokens[1];
@@ -354,6 +392,7 @@ public class Player : NetworkBehaviour
         current.Red += tokens[3];
         current.Black += tokens[4];
         Tokens.Value = current;
+
         Debug.Log($"[Player-Client] 收到服务器入账: +W{tokens[0]} +B{tokens[1]} +G{tokens[2]} +R{tokens[3]} +K{tokens[4]}");
         TryEndTurn();
     }
@@ -387,5 +426,21 @@ public class Player : NetworkBehaviour
     private static ClientRpcParams BuildSingleTargetRpcParams(ulong clientId)
     {
         return new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } };
+    }
+    // 专门给 PlayerUIManager 暴力的接线口
+    public void BindUI(PlayerPanel panel)
+    {
+        myBoundUI = panel;
+        if (myBoundUI != null)
+        {
+            // 绑上数据线
+            Tokens.OnValueChanged += OnTokensChanged;
+            Discounts.OnValueChanged += OnDiscountsChanged;
+            Score.OnValueChanged += OnScoreChanged;
+
+            // 立刻推一次数据，防止 UI 是空的
+            RefreshUI();
+            Debug.Log($"[Player] 玩家 {OwnerClientId} 成功补挂并刷新 UI 面板！");
+        }
     }
 }

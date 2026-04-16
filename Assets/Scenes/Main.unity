@@ -2054,7 +2054,7 @@ MonoBehaviour:
     m_InternalValue: 0
   IsLastRound:
     m_InternalValue: 0
-  playersNeededToStart: 3
+  playersNeededToStart: 2
 --- !u!114 &2057369526
 MonoBehaviour:
   m_ObjectHideFlags: 0

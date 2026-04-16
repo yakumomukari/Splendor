@@ -182,20 +182,31 @@ public class Player : NetworkBehaviour
     // ==========================================
     private void HandleTakeTokensRequest(int[] requestedTokens)
     {
-        if (requestedTokens == null || requestedTokens.Length < 5)
+        if (requestedTokens == null || requestedTokens.Length < 5) return;
+        if (BankManager.Instance == null) return;
+
+        // 计算玩家当前总代币
+        var t = Tokens.Value;
+        int currentTotal = t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
+
+        // 严格对齐 Bank 的参数顺序: 绿, 蓝, 红, 白, 黑
+        int[] selected = new int[] { requestedTokens[2], requestedTokens[1], requestedTokens[3], requestedTokens[0], requestedTokens[4] };
+        int[] bank = new int[] {
+            BankManager.Instance.EmeraldCount.Value,
+            BankManager.Instance.SapphireCount.Value,
+            BankManager.Instance.RubyCount.Value,
+            BankManager.Instance.DiamondCount.Value,
+            BankManager.Instance.OnyxCount.Value
+        };
+
+        // UI层拦截：如果不符合璀璨宝石动态规则，直接驳回
+        if (!GameRules.IsValidTokenDraft(selected, bank, currentTotal))
         {
-            Debug.LogWarning("[Player-Client] 拿币请求参数非法。");
-            return;
-        }
-        if (BankManager.Instance == null)
-        {
-            Debug.LogWarning("[Player-Client] BankManager.Instance 为空，无法发起拿币请求。");
+            Debug.LogWarning($"[Player-Client] 拿取不合规！当前已有: {currentTotal}");
+            GameEvents.OnShowWarningMsg?.Invoke("拿取代币非法！请检查是否达到10个上限，或银行库存不足。");
             return;
         }
 
-        Debug.Log($"[Player-Client] 发起拿币请求: W={requestedTokens[0]} B={requestedTokens[1]} G={requestedTokens[2]} R={requestedTokens[3]} K={requestedTokens[4]}");
-
-        // UI顺序转银行顺序并发送请求
         BankManager.Instance.RequestTakeTokensServerRpc(requestedTokens[2], requestedTokens[1], requestedTokens[3], requestedTokens[0], requestedTokens[4]);
     }
 
@@ -358,18 +369,9 @@ public class Player : NetworkBehaviour
     private void TryEndTurn()
     {
         if (!IsServer) return;
-        var t = Tokens.Value;
-        int total = t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
 
-        if (total > 10)
-        {
-            TurnManager.Instance.IsWaitingForReturn.Value = true;
-            RequireReturnTokensClientRpc(total - 10);
-        }
-        else
-        {
-            TurnManager.Instance.GoToNextTurn();
-        }
+        // 既然源头已经拦截了 >10 的情况，这里什么都不用查了，直接无脑切回合
+        TurnManager.Instance.GoToNextTurn();
     }
 
     // ==========================================

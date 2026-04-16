@@ -11,7 +11,7 @@ public class BankUI : MonoBehaviour
 
     [Header("玩家暂存区 (顺序: 白,蓝,绿,红,黑)")]
     public TextMeshProUGUI[] selectedTokenTexts = new TextMeshProUGUI[5];
-    
+
     [Header("UI 控件")]
     public Button confirmButton;
 
@@ -20,7 +20,7 @@ public class BankUI : MonoBehaviour
     // 缓存的银行当前存量，用于合法性校验
     private int[] currentBankTokens = new int[5];
     private bool isBound;
-    private bool pendingRequest;
+    // private bool pendingRequest;
 
     private void OnEnable()
     {
@@ -74,13 +74,7 @@ public class BankUI : MonoBehaviour
 
     private void OnBankChanged(int _, int __)
     {
-        if (pendingRequest)
-        {
-            pendingRequest = false;
-            ClearSelection();
-            return;
-        }
-
+        // 别搞什么 pending 拦截了，只要服务器端银行数据变了，无脑拉取最新数据刷新 UI
         RefreshFromBankManager();
     }
 
@@ -136,7 +130,26 @@ public class BankUI : MonoBehaviour
             }
         }
     }
-
+    // ==========================================
+    // 【新增】：获取本地玩家身上的代币总数
+    // ==========================================
+    private int GetLocalPlayerTokenTotal()
+    {
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+        {
+            var localObj = NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject();
+            if (localObj != null)
+            {
+                Player p = localObj.GetComponent<Player>();
+                if (p != null)
+                {
+                    var t = p.Tokens.Value;
+                    return t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
+                }
+            }
+        }
+        return 0;
+    }
     /// <summary>
     /// 当玩家点击某种类型代币时调用 (绑定到 UI 按钮，传入 0~4)
     /// </summary>
@@ -144,18 +157,39 @@ public class BankUI : MonoBehaviour
     {
         if (colorIndex < 0 || colorIndex >= 5) return;
 
-        // 以前纯发意图的做法现在升级加入了【客户端预判】，过滤非法拼装提高体验
         selectedTokens[colorIndex]++;
-        
-        if (!GameRules.IsValidTokenDraft(selectedTokens, currentBankTokens))
+
+        // --- 客户端轻量预判：允许“半成品”状态，但不允许触碰红线 ---
+        int currentTotal = GetLocalPlayerTokenTotal();
+        int selectedTotal = 0;
+        bool hasDouble = false;
+
+        for (int i = 0; i < 5; i++)
         {
-            // 校验不通过：这颗拿得不合法，把它退回去
-            selectedTokens[colorIndex]--;
-            return;
+            selectedTotal += selectedTokens[i];
+            if (selectedTokens[i] == 2) hasDouble = true;
+
+            // 铁律1：单色绝不能拿超过2个，且不能透支银行库存
+            if (selectedTokens[i] > 2 || selectedTokens[i] > currentBankTokens[i])
+            {
+                selectedTokens[colorIndex]--; return;
+            }
+        }
+
+        // 铁律2：单次拿取总数不超3，总资产上限不超10，拿了同色就不能再拿异色
+        if (selectedTotal > 3 || currentTotal + selectedTotal > 10 || (hasDouble && selectedTotal > 2))
+        {
+            selectedTokens[colorIndex]--; return;
+        }
+
+        // 铁律3：拿2个同色的前提是该颜色剩余>=4
+        if (selectedTokens[colorIndex] == 2 && currentBankTokens[colorIndex] < 4)
+        {
+            selectedTokens[colorIndex]--; return;
         }
 
         RefreshSelectedUI();
-        RefreshBankUI(); // 【新增】点这颗宝石时，除了购物车增加，银行的字也要实时变少
+        RefreshBankUI();
         UpdateConfirmButtonState();
     }
 
@@ -183,8 +217,6 @@ public class BankUI : MonoBehaviour
             }
         }
 
-        Debug.Log($"[BankUI] ConfirmTakeTokens: W={selectedTokens[0]} B={selectedTokens[1]} G={selectedTokens[2]} R={selectedTokens[3]} K={selectedTokens[4]}");
-
         bool sent = false;
 
         // 先走事件链(若本地Player已订阅)
@@ -192,11 +224,7 @@ public class BankUI : MonoBehaviour
         {
             GameEvents.OnTakeTokensReq.Invoke(new int[]
             {
-                selectedTokens[0],
-                selectedTokens[1],
-                selectedTokens[2],
-                selectedTokens[3],
-                selectedTokens[4]
+                selectedTokens[0], selectedTokens[1], selectedTokens[2], selectedTokens[3], selectedTokens[4]
             });
             sent = true;
         }
@@ -205,11 +233,7 @@ public class BankUI : MonoBehaviour
         if (!sent && BankManager.Instance != null)
         {
             BankManager.Instance.RequestTakeTokensServerRpc(
-                selectedTokens[2], // green -> em
-                selectedTokens[1], // blue  -> sa
-                selectedTokens[3], // red   -> ru
-                selectedTokens[0], // white -> di
-                selectedTokens[4]  // black -> on
+                selectedTokens[2], selectedTokens[1], selectedTokens[3], selectedTokens[0], selectedTokens[4]
             );
             sent = true;
             Debug.Log("[BankUI] 事件链未订阅，已直接走 BankManager RPC 兜底。");
@@ -221,8 +245,11 @@ public class BankUI : MonoBehaviour
             return;
         }
 
-        // 不立即清空，等待服务器库存同步后再清空，避免“点完秒回默认”的错觉。
-        pendingRequest = true;
+        // ==========================================
+        // 【核心修复】：请求一发出去，本地立刻清空暂存区并重置按钮状态！
+        // 绝对不要死等服务器的回包，保证 UI 永不卡死。
+        // ==========================================
+        ClearSelection();
     }
 
     /// <summary>
@@ -243,38 +270,9 @@ public class BankUI : MonoBehaviour
     {
         if (confirmButton == null) return;
 
-        int total = 0;
-        bool hasDouble = false;
-        foreach (int count in selectedTokens)
-        {
-            total += count;
-            if (count == 2) hasDouble = true;
-        }
-
-        // 基础合法提取条件：3个颜色各1个(无同色)，或2个同色
-        bool isCompleteDraft = (total == 3 && !hasDouble) || (total == 2 && hasDouble);
-
-        // 特殊规则修正：如果玩家拿异色的数量不足3个，但银行里确实已经没有别的颜色可以给他拿了，这也是合法的！
-        if (!isCompleteDraft && !hasDouble && total > 0 && total < 3)
-        {
-            int otherAvailableColors = 0;
-            for (int i = 0; i < 5; i++)
-            {
-                // 如果银行某款颜色还有货，且玩家的暂存区里还没拿它
-                if (currentBankTokens[i] > 0 && selectedTokens[i] == 0)
-                {
-                    otherAvailableColors++;
-                }
-            }
-
-            // 如果其他所有可选颜色都被拿光了，即玩家已经算是“尽力拿满能拿的所有异色”了，允许确认提交。
-            if (otherAvailableColors == 0)
-            {
-                isCompleteDraft = true;
-            }
-        }
-
-        confirmButton.interactable = isCompleteDraft;
+        // 确认按钮是否亮起？直接甩给 GameRules 的全套终态校验逻辑！
+        int currentTotal = GetLocalPlayerTokenTotal();
+        confirmButton.interactable = GameRules.IsValidTokenDraft(selectedTokens, currentBankTokens, currentTotal);
     }
 
     /// <summary>

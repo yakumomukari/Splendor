@@ -25,10 +25,10 @@ public static class GameRules
         {
             // 实际成本 = Max(0, 成本 - 折扣)
             int actualCost = Math.Max(0, cardCosts[i] - playerDiscounts[i]);
-            
+
             // 缺口 = Max(0, 实际成本 - 持有宝石)
             int shortfall = Math.Max(0, actualCost - playerGems[i]);
-            
+
             // 累加缺口，这也就是需要用黄金抵扣的数量
             goldNeeded += shortfall;
         }
@@ -38,34 +38,61 @@ public static class GameRules
     }
 
     /// <summary>
-    /// 校验玩家拿取代币的操作是否合法 (预判阶段)
+    /// 校验玩家拿取代币的操作是否合法 (完美适配无弃牌阶段的动态上限)
     /// </summary>
-    public static bool IsValidTokenDraft(int[] selectedTokens, int[] bankRemaining)
+    /// <param name="selectedTokens">玩家选择拿取的数量数组</param>
+    /// <param name="bankRemaining">银行当前的剩余库存</param>
+    /// <param name="playerCurrentTotal">玩家当前兜里已经有的代币总数 (含黄金)</param>
+    public static bool IsValidTokenDraft(int[] selectedTokens, int[] bankRemaining, int playerCurrentTotal)
     {
         if (selectedTokens.Length != 5 || bankRemaining.Length != 5) return false;
 
-        int total = 0;
+        int totalSelected = 0;
         bool hasDouble = false;
+        int availableColorsInBank = 0; // 记录银行当前还有几种颜色是有货的
 
         for (int i = 0; i < 5; i++)
         {
+            if (bankRemaining[i] > 0) availableColorsInBank++;
+
             int count = selectedTokens[i];
-            
-            if (count > 2) return false; // 绝不能拿超过 2 个一样的
-            if (count > bankRemaining[i]) return false; // 绝不能拿取超过银行实质剩余的数量
-            
+            if (count < 0) return false; // 防穿透
+            if (count > bankRemaining[i]) return false; // 银行没那么多
+
             if (count == 2)
             {
                 hasDouble = true;
-                // 拿 2 个相同色的前提是：被拿取前银行该颜色的剩余量 >= 4
-                if (bankRemaining[i] < 4) return false;
+                if (bankRemaining[i] < 4) return false; // 拿2个同色的铁律
             }
-            
-            total += count;
+            else if (count > 2)
+            {
+                return false; // 绝对不允许单色拿超过2个
+            }
+
+            totalSelected += count;
         }
 
-        if (total > 3) return false; // 总数最多不允许超过 3 个
-        if (hasDouble && total > 2) return false; // 如果已经拿了 2 个同色，不能再拿其它的（即总数只能为 2）
+        if (totalSelected <= 0) return false;
+
+        // 绝对底线：拿完之后总数不能超过 10
+        if (playerCurrentTotal + totalSelected > 10) return false;
+
+        // 分支判定：拿同色 vs 拿不同色
+        if (hasDouble)
+        {
+            // 如果触发了拿2个同色，那总拿取量必须严格等于 2
+            if (totalSelected != 2) return false;
+        }
+        else
+        {
+            // 拿不同色的情况：
+            // 正常应该拿 3 个。但是如果玩家快满 10 个了，或者银行没颜色了，就只能被迫少拿。
+            // 必须强制玩家拿“允许范围内的最大值”，不能故意少拿。
+            int requiredToTake = Math.Min(3, 10 - playerCurrentTotal);
+            requiredToTake = Math.Min(requiredToTake, availableColorsInBank);
+
+            if (totalSelected != requiredToTake) return false;
+        }
 
         return true;
     }

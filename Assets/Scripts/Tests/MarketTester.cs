@@ -1,272 +1,272 @@
-using System.Collections.Generic;
-using UnityEngine;
+// using System.Collections.Generic;
+// using UnityEngine;
 
-public class LocalUIDriver : MonoBehaviour
-{
-    [Header("运行模式")]
-    [Tooltip("仅用于本地离线UI联调。联机时请关闭。")]
-    public bool enableLocalSimulation = false;
+// public class LocalUIDriver : MonoBehaviour
+// {
+//     [Header("运行模式")]
+//     [Tooltip("仅用于本地离线UI联调。联机时请关闭。")]
+//     public bool enableLocalSimulation = false;
 
-    [Header("依赖绑定")]
-    public MarketManager marketManager;
-    public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
-    public BankUI bankUI;           // 挂载刚做好的银行代币面板
-    
-    [Header("贵族测试")]
-    public Transform nobleContainer;   // 贵族UI的父节点容器 (NoblePanel_Prefab 本身)
-    public NobleItemUI noblePrefab;    // 刚刚做好的贵族单体预制体
-    public List<NobleSO> testNobles;   // 请随意拖入几个刚刚生成的贵族SO
+//     [Header("依赖绑定")]
+//     public MarketManager marketManager;
+//     public PlayerPanel playerPanel; // 挂载刚做好的玩家面板预制体
+//     public BankUI bankUI;           // 挂载刚做好的银行代币面板
 
-    [Header("测试数据源")]
-    public List<CardSO> testDeck; // 请在 Inspector 中随意拖入 15-20 张卡牌 SO
+//     [Header("贵族测试")]
+//     public Transform nobleContainer;   // 贵族UI的父节点容器 (NoblePanel_Prefab 本身)
+//     public NobleItemUI noblePrefab;    // 刚刚做好的贵族单体预制体
+//     public List<NobleSO> testNobles;   // 请随意拖入几个刚刚生成的贵族SO
 
-    private List<CardSO> activeCards = new List<CardSO>();
-    
-    // 模拟玩家当前资产
-    private int[] playerTokens = new int[5];
-    private int[] playerDiscounts = new int[5];
-    private int playerGold = 0;
-    private int playerScore = 0;
+//     [Header("测试数据源")]
+//     public List<CardSO> testDeck; // 请在 Inspector 中随意拖入 15-20 张卡牌 SO
 
-    // 模拟的银行数据
-    private int[] bankTokens = new int[5] { 7, 7, 7, 7, 7 };
-    private int bankGold = 5;
+//     private List<CardSO> activeCards = new List<CardSO>();
 
-    // 模拟牌堆剩余数量
-    private int deck1Count = 10;
-    private int deck2Count = 10;
-    private int deck3Count = 10;
+//     // 模拟玩家当前资产
+//     private int[] playerTokens = new int[5];
+//     private int[] playerDiscounts = new int[5];
+//     private int playerGold = 0;
+//     private int playerScore = 0;
 
-    private bool runtimeEnabled;
+//     // 模拟的银行数据
+//     private int[] bankTokens = new int[5] { 7, 7, 7, 7, 7 };
+//     private int bankGold = 5;
 
-    private void Start()
-    {
-        bool networkActive = Unity.Netcode.NetworkManager.Singleton != null
-            && (Unity.Netcode.NetworkManager.Singleton.IsClient || Unity.Netcode.NetworkManager.Singleton.IsServer);
+//     // 模拟牌堆剩余数量
+//     private int deck1Count = 10;
+//     private int deck2Count = 10;
+//     private int deck3Count = 10;
 
-        runtimeEnabled = enableLocalSimulation && !networkActive;
-        if (!runtimeEnabled)
-        {
-            if (!enableLocalSimulation)
-            {
-                Debug.Log("[LocalUIDriver] 本地模拟已关闭，不会接管UI与经济逻辑。");
-            }
-            else
-            {
-                Debug.LogWarning("[LocalUIDriver] 检测到联机会话，已自动停用本地模拟，避免覆盖服务器同步数据。");
-            }
-            return;
-        }
+//     private bool runtimeEnabled;
 
-        // 提取前 12 张卡作为初始市场
-        for (int i = 0; i < 12 && i < testDeck.Count; i++)
-        {
-            activeCards.Add(testDeck[i]);
-        }
+//     private void Start()
+//     {
+//         bool networkActive = Unity.Netcode.NetworkManager.Singleton != null
+//             && (Unity.Netcode.NetworkManager.Singleton.IsClient || Unity.Netcode.NetworkManager.Singleton.IsServer);
 
-        // 初始化测试贵族 (随机抽 3 个展示)
-        if (nobleContainer != null && noblePrefab != null && testNobles != null)
-        {
-            for (int i = 0; i < 3 && i < testNobles.Count; i++)
-            {
-                NobleItemUI newNoble = Instantiate(noblePrefab, nobleContainer);
-                newNoble.Setup(testNobles[i]);
-            }
-        }
+//         runtimeEnabled = enableLocalSimulation && !networkActive;
+//         if (!runtimeEnabled)
+//         {
+//             if (!enableLocalSimulation)
+//             {
+//                 Debug.Log("[LocalUIDriver] 本地模拟已关闭，不会接管UI与经济逻辑。");
+//             }
+//             else
+//             {
+//                 Debug.LogWarning("[LocalUIDriver] 检测到联机会话，已自动停用本地模拟，避免覆盖服务器同步数据。");
+//             }
+//             return;
+//         }
 
-        // 注册全局事件
-        GameEvents.OnBuyCardReq += HandleBuyCardRequest;
-        GameEvents.OnTakeTokensReq += HandleTakeTokens;
+//         // 提取前 12 张卡作为初始市场
+//         for (int i = 0; i < 12 && i < testDeck.Count; i++)
+//         {
+//             activeCards.Add(testDeck[i]);
+//         }
 
-        RefreshMarket();
-        RefreshPlayerPanel();
-        RefreshBankPanel();
-        PrintCurrentAssets();
-    }
+//         // 初始化测试贵族 (随机抽 3 个展示)
+//         if (nobleContainer != null && noblePrefab != null && testNobles != null)
+//         {
+//             for (int i = 0; i < 3 && i < testNobles.Count; i++)
+//             {
+//                 NobleItemUI newNoble = Instantiate(noblePrefab, nobleContainer);
+//                 newNoble.Setup(testNobles[i]);
+//             }
+//         }
 
-    private void OnDestroy()
-    {
-        if (!runtimeEnabled) return;
+//         // 注册全局事件
+//         GameEvents.OnBuyCardReq += HandleBuyCardRequest;
+//         GameEvents.OnTakeTokensReq += HandleTakeTokens;
 
-        // 销毁时注销事件，防止内存泄漏
-        GameEvents.OnBuyCardReq -= HandleBuyCardRequest;
-        GameEvents.OnTakeTokensReq -= HandleTakeTokens;
-    }
+//         RefreshMarket();
+//         RefreshPlayerPanel();
+//         RefreshBankPanel();
+//         PrintCurrentAssets();
+//     }
 
-    private void Update()
-    {
-        if (!runtimeEnabled) return;
+//     private void OnDestroy()
+//     {
+//         if (!runtimeEnabled) return;
 
-        bool dataChanged = false;
+//         // 销毁时注销事件，防止内存泄漏
+//         GameEvents.OnBuyCardReq -= HandleBuyCardRequest;
+//         GameEvents.OnTakeTokensReq -= HandleTakeTokens;
+//     }
 
-        // 键盘 1-5 分别增加 白、蓝、绿、红、黑 代币 (模拟作弊获取并扣掉银行的量)
-        if (Input.GetKeyDown(KeyCode.Alpha1) && bankTokens[0] > 0) { playerTokens[0]++; bankTokens[0]--; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha2) && bankTokens[1] > 0) { playerTokens[1]++; bankTokens[1]--; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha3) && bankTokens[2] > 0) { playerTokens[2]++; bankTokens[2]--; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha4) && bankTokens[3] > 0) { playerTokens[3]++; bankTokens[3]--; dataChanged = true; }
-        if (Input.GetKeyDown(KeyCode.Alpha5) && bankTokens[4] > 0) { playerTokens[4]++; bankTokens[4]--; dataChanged = true; }
-        
-        // 键盘 G 增加黄金
-        if (Input.GetKeyDown(KeyCode.G) && bankGold > 0) { playerGold++; bankGold--; dataChanged = true; }
-        
-        // 键盘 C 清空资产，并退还给银行
-        if (Input.GetKeyDown(KeyCode.C))
-        {
-            for(int i = 0; i < 5; i++)
-            {
-                bankTokens[i] += playerTokens[i];
-                playerTokens[i] = 0;
-                playerDiscounts[i] = 0;
-            }
-            bankGold += playerGold;
-            playerGold = 0;
-            playerScore = 0;
-            dataChanged = true;
-        }
+//     private void Update()
+//     {
+//         if (!runtimeEnabled) return;
 
-        if (dataChanged)
-        {
-            PrintCurrentAssets();
-            RefreshMarket();
-            RefreshPlayerPanel();
-            RefreshBankPanel();
-        }
-    }
+//         bool dataChanged = false;
 
-    private void RefreshMarket()
-    {
-        // 调用 MarketManager 的接口刷新排版与交互状态
-        marketManager.UpdateMarket(activeCards, deck1Count, deck2Count, deck3Count);
-        marketManager.SetMarketInteractable(playerTokens, playerDiscounts, playerGold);
-    }
+//         // 键盘 1-5 分别增加 白、蓝、绿、红、黑 代币 (模拟作弊获取并扣掉银行的量)
+//         if (Input.GetKeyDown(KeyCode.Alpha1) && bankTokens[0] > 0) { playerTokens[0]++; bankTokens[0]--; dataChanged = true; }
+//         if (Input.GetKeyDown(KeyCode.Alpha2) && bankTokens[1] > 0) { playerTokens[1]++; bankTokens[1]--; dataChanged = true; }
+//         if (Input.GetKeyDown(KeyCode.Alpha3) && bankTokens[2] > 0) { playerTokens[2]++; bankTokens[2]--; dataChanged = true; }
+//         if (Input.GetKeyDown(KeyCode.Alpha4) && bankTokens[3] > 0) { playerTokens[3]++; bankTokens[3]--; dataChanged = true; }
+//         if (Input.GetKeyDown(KeyCode.Alpha5) && bankTokens[4] > 0) { playerTokens[4]++; bankTokens[4]--; dataChanged = true; }
 
-    private void HandleTakeTokens(int[] tokens)
-    {
-        Debug.Log("[UI事件拦截] 玩家确认拿取代币: 白:" + tokens[0] + " 蓝:" + tokens[1] + " 绿:" + tokens[2] + " 红:" + tokens[3] + " 黑:" + tokens[4]);
+//         // 键盘 G 增加黄金
+//         if (Input.GetKeyDown(KeyCode.G) && bankGold > 0) { playerGold++; bankGold--; dataChanged = true; }
 
-        // 再做一次合法性校验（这是服务器本该做的事）
-        if (!GameRules.IsValidTokenDraft(tokens, bankTokens))
-        {
-            Debug.LogWarning("[系统模拟] 拿取代币请求不合法！可能是同色时库存不足或者总数作弊。");
-            return;
-        }
+//         // 键盘 C 清空资产，并退还给银行
+//         if (Input.GetKeyDown(KeyCode.C))
+//         {
+//             for(int i = 0; i < 5; i++)
+//             {
+//                 bankTokens[i] += playerTokens[i];
+//                 playerTokens[i] = 0;
+//                 playerDiscounts[i] = 0;
+//             }
+//             bankGold += playerGold;
+//             playerGold = 0;
+//             playerScore = 0;
+//             dataChanged = true;
+//         }
 
-        // 进行扣费和装兜处理
-        for (int i = 0; i < 5; i++)
-        {
-            bankTokens[i] -= tokens[i];
-            playerTokens[i] += tokens[i];
-        }
+//         if (dataChanged)
+//         {
+//             PrintCurrentAssets();
+//             RefreshMarket();
+//             RefreshPlayerPanel();
+//             RefreshBankPanel();
+//         }
+//     }
 
-        // 交易完成后再次刷新 UI 与 输出
-        PrintCurrentAssets();
-        RefreshMarket();
-        RefreshPlayerPanel();
-        RefreshBankPanel();
-    }
+//     private void RefreshMarket()
+//     {
+//         // 调用 MarketManager 的接口刷新排版与交互状态
+//         marketManager.UpdateMarket(activeCards, deck1Count, deck2Count, deck3Count);
+//         marketManager.SetMarketInteractable(playerTokens, playerDiscounts, playerGold);
+//     }
 
-    private void HandleBuyCardRequest(int cardId)
-    {
-        Debug.Log($"[UI事件拦截] 玩家点击购买，目标卡牌 ID: {cardId}");
+//     private void HandleTakeTokens(int[] tokens)
+//     {
+//         Debug.Log("[UI事件拦截] 玩家确认拿取代币: 白:" + tokens[0] + " 蓝:" + tokens[1] + " 绿:" + tokens[2] + " 红:" + tokens[3] + " 黑:" + tokens[4]);
 
-        // 查找对应的卡牌
-        CardSO targetCard = activeCards.Find(c => c.id == cardId);
-        if (targetCard != null)
-        {
-            // 打包该卡牌的花费
-            int[] cardCosts = new int[] 
-            { 
-                targetCard.costWhite, targetCard.costBlue, 
-                targetCard.costGreen, targetCard.costRed, targetCard.costBlack 
-            };
+//         // 再做一次合法性校验（这是服务器本该做的事）
+//         if (!GameRules.IsValidTokenDraft(tokens, bankTokens))
+//         {
+//             Debug.LogWarning("[系统模拟] 拿取代币请求不合法！可能是同色时库存不足或者总数作弊。");
+//             return;
+//         }
 
-            // 【双重校验】模拟服务器扣除代币逻辑
-            if (GameRules.CanAffordCard(playerTokens, playerDiscounts, playerGold, cardCosts, out int goldNeeded))
-            {
-                // 扣除相应代币并将其【退还给银行区】
-                for (int i = 0; i < 5; i++)
-                {
-                    int actualCost = Mathf.Max(0, cardCosts[i] - playerDiscounts[i]);
-                    int tokenCost = Mathf.Min(actualCost, playerTokens[i]); // 优先扣除普通代币
-                    
-                    playerTokens[i] -= tokenCost;
-                    bankTokens[i] += tokenCost; // 【系统模拟】花出去的钱回到公共货币池
-                }
-                
-                // 扣除黄金并退还
-                playerGold -= goldNeeded;
-                bankGold += goldNeeded;
-                
-                // 增加玩家的永久折扣 (假设黄金不会作为折扣产出)
-                if ((int)targetCard.bonusGem < 5)
-                {
-                    playerDiscounts[(int)targetCard.bonusGem]++;
-                }
-                
-                // 增加玩家分数
-                playerScore += targetCard.points;
+//         // 进行扣费和装兜处理
+//         for (int i = 0; i < 5; i++)
+//         {
+//             bankTokens[i] -= tokens[i];
+//             playerTokens[i] += tokens[i];
+//         }
 
-                Debug.Log($"[系统模拟] 购买成功！获得了卡牌 {cardId}，永久折扣+1, 威望分+{targetCard.points}");
-            }
-            else
-            {
-                Debug.LogWarning("[系统模拟] 购买失败！代币不足。");
-                return;
-            }
-        }
+//         // 交易完成后再次刷新 UI 与 输出
+//         PrintCurrentAssets();
+//         RefreshMarket();
+//         RefreshPlayerPanel();
+//         RefreshBankPanel();
+//     }
 
-        // 模拟服务器逻辑：将被购买的卡牌移出市场
-        int index = activeCards.FindIndex(c => c.id == cardId);
-        if (index != -1)
-        {
-            activeCards.RemoveAt(index);
-            
-            // 如果牌库还有剩余，随机补充一张新卡
-            if (testDeck.Count > 12)
-            {
-                CardSO newCard = testDeck[Random.Range(12, testDeck.Count)];
-                activeCards.Insert(index, newCard);
-                Debug.Log($"[系统模拟] 补充新卡牌 ID: {newCard.id}");
+//     private void HandleBuyCardRequest(int cardId)
+//     {
+//         Debug.Log($"[UI事件拦截] 玩家点击购买，目标卡牌 ID: {cardId}");
 
-                // 模拟根据等级减少对应牌堆数量
-                if (newCard.level == 1) deck1Count--;
-                else if (newCard.level == 2) deck2Count--;
-                else if (newCard.level == 3) deck3Count--;
-            }
-        }
+//         // 查找对应的卡牌
+//         CardSO targetCard = activeCards.Find(c => c.id == cardId);
+//         if (targetCard != null)
+//         {
+//             // 打包该卡牌的花费
+//             int[] cardCosts = new int[] 
+//             { 
+//                 targetCard.costWhite, targetCard.costBlue, 
+//                 targetCard.costGreen, targetCard.costRed, targetCard.costBlack 
+//             };
 
-        // 交易完成后再次刷新 UI 与 输出
-        PrintCurrentAssets();
-        RefreshMarket();
-        RefreshPlayerPanel();
-        RefreshBankPanel();
-    }
+//             // 【双重校验】模拟服务器扣除代币逻辑
+//             if (GameRules.CanAffordCard(playerTokens, playerDiscounts, playerGold, cardCosts, out int goldNeeded))
+//             {
+//                 // 扣除相应代币并将其【退还给银行区】
+//                 for (int i = 0; i < 5; i++)
+//                 {
+//                     int actualCost = Mathf.Max(0, cardCosts[i] - playerDiscounts[i]);
+//                     int tokenCost = Mathf.Min(actualCost, playerTokens[i]); // 优先扣除普通代币
 
-    private void RefreshPlayerPanel()
-    {
-        if (playerPanel != null)
-        {
-            playerPanel.UpdatePlayerUI(playerTokens, playerDiscounts, playerGold, playerScore);
-        }
-    }
+//                     playerTokens[i] -= tokenCost;
+//                     bankTokens[i] += tokenCost; // 【系统模拟】花出去的钱回到公共货币池
+//                 }
 
-    private void RefreshBankPanel()
-    {
-        if (bankUI != null)
-        {
-            bankUI.UpdateBank(bankTokens, bankGold);
-        }
-    }
+//                 // 扣除黄金并退还
+//                 playerGold -= goldNeeded;
+//                 bankGold += goldNeeded;
 
-    private void PrintCurrentAssets()
-    {
-        Debug.Log($"当前模拟资产 -> 白:{playerTokens[0]} 蓝:{playerTokens[1]} 绿:{playerTokens[2]} 红:{playerTokens[3]} 黑:{playerTokens[4]} 金:{playerGold} | 当前折扣总数: {GetTotalDiscounts()} | 分数: {playerScore}");
-    }
+//                 // 增加玩家的永久折扣 (假设黄金不会作为折扣产出)
+//                 if ((int)targetCard.bonusGem < 5)
+//                 {
+//                     playerDiscounts[(int)targetCard.bonusGem]++;
+//                 }
 
-    private int GetTotalDiscounts()
-    {
-        int sum = 0;
-        foreach (var d in playerDiscounts) sum += d;
-        return sum;
-    }
-}
+//                 // 增加玩家分数
+//                 playerScore += targetCard.points;
+
+//                 Debug.Log($"[系统模拟] 购买成功！获得了卡牌 {cardId}，永久折扣+1, 威望分+{targetCard.points}");
+//             }
+//             else
+//             {
+//                 Debug.LogWarning("[系统模拟] 购买失败！代币不足。");
+//                 return;
+//             }
+//         }
+
+//         // 模拟服务器逻辑：将被购买的卡牌移出市场
+//         int index = activeCards.FindIndex(c => c.id == cardId);
+//         if (index != -1)
+//         {
+//             activeCards.RemoveAt(index);
+
+//             // 如果牌库还有剩余，随机补充一张新卡
+//             if (testDeck.Count > 12)
+//             {
+//                 CardSO newCard = testDeck[Random.Range(12, testDeck.Count)];
+//                 activeCards.Insert(index, newCard);
+//                 Debug.Log($"[系统模拟] 补充新卡牌 ID: {newCard.id}");
+
+//                 // 模拟根据等级减少对应牌堆数量
+//                 if (newCard.level == 1) deck1Count--;
+//                 else if (newCard.level == 2) deck2Count--;
+//                 else if (newCard.level == 3) deck3Count--;
+//             }
+//         }
+
+//         // 交易完成后再次刷新 UI 与 输出
+//         PrintCurrentAssets();
+//         RefreshMarket();
+//         RefreshPlayerPanel();
+//         RefreshBankPanel();
+//     }
+
+//     private void RefreshPlayerPanel()
+//     {
+//         if (playerPanel != null)
+//         {
+//             playerPanel.UpdatePlayerUI(playerTokens, playerDiscounts, playerGold, playerScore);
+//         }
+//     }
+
+//     private void RefreshBankPanel()
+//     {
+//         if (bankUI != null)
+//         {
+//             bankUI.UpdateBank(bankTokens, bankGold);
+//         }
+//     }
+
+//     private void PrintCurrentAssets()
+//     {
+//         Debug.Log($"当前模拟资产 -> 白:{playerTokens[0]} 蓝:{playerTokens[1]} 绿:{playerTokens[2]} 红:{playerTokens[3]} 黑:{playerTokens[4]} 金:{playerGold} | 当前折扣总数: {GetTotalDiscounts()} | 分数: {playerScore}");
+//     }
+
+//     private int GetTotalDiscounts()
+//     {
+//         int sum = 0;
+//         foreach (var d in playerDiscounts) sum += d;
+//         return sum;
+//     }
+// }

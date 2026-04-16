@@ -60,10 +60,18 @@ public class TurnManager : NetworkBehaviour
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
 
-            // 把 Host (房主，ID为0) 自己先加进座位表
-            playerOrder.Add(NetworkManager.ServerClientId);
-            CurrentActivePlayerId.Value = NetworkManager.ServerClientId;
-            Debug.Log("玩家 0 加入");
+            // 仅 Host 模式把 0 号(本地玩家)加入座位表；专用服不应占玩家席位。
+            if (NetworkManager.Singleton.IsHost)
+            {
+                playerOrder.Add(NetworkManager.ServerClientId);
+                CurrentActivePlayerId.Value = NetworkManager.ServerClientId;
+                Debug.Log("[TurnManager] Host 模式：玩家 0 入座。");
+            }
+            else
+            {
+                CurrentActivePlayerId.Value = ulong.MaxValue;
+                Debug.Log("[TurnManager] 专用服模式：服务器不占玩家席位，等待真实客户端入座。");
+            }
         }
     }
 
@@ -97,7 +105,15 @@ public class TurnManager : NetworkBehaviour
             if (playerOrder.Count >= playersNeededToStart)
             {
                 gameHasStarted = true;
+
+                // 首回合给座位表首位真实玩家，避免专用服卡在 0 号回合。
+                if (playerOrder.Count > 0)
+                {
+                    CurrentActivePlayerId.Value = playerOrder[0];
+                }
+
                 Debug.Log("[TurnManager] 人数凑齐，正式开局！下发 UI 座位表！");
+                Debug.Log($"[TurnManager] 开局首回合玩家: {CurrentActivePlayerId.Value}");
 
                 // 1. 把顺序转成数组发给所有客户端去构建 UI
                 BroadcastLayout(playerOrder.ToArray());

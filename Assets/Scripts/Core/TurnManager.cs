@@ -27,10 +27,27 @@ public class TurnManager : NetworkBehaviour
     public int playersNeededToStart = 1; // 测试时设为2，打局时设为4
 
     private bool gameHasStarted = false;
+    private ulong[] pendingUiOrder;
+    private bool pendingUiLayout;
+    private float pendingUiDeadline;
+
     private void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);
         else Instance = this;
+    }
+
+    private void Update()
+    {
+        if (!pendingUiLayout) return;
+        if (Time.unscaledTime > pendingUiDeadline)
+        {
+            pendingUiLayout = false;
+            Debug.LogError("[TurnManager] UI 座位表重试超时：PlayerUIManager 仍未就绪。");
+            return;
+        }
+
+        TryBuildClientLayout();
     }
 
     public override void OnNetworkSpawn()
@@ -64,8 +81,12 @@ public class TurnManager : NetworkBehaviour
     // 修改你的 OnClientConnected，加入发令枪逻辑
     private void OnClientConnected(ulong clientId)
     {
-        // 如果游戏已经开始了，这人就是中途乱入的观战者，别加进座位表！
-        if (gameHasStarted) return;
+        // 游戏已开始：不给进座位表，但仍发一份当前布局给新连入客户端（观战/补绘）。
+        if (gameHasStarted)
+        {
+            SendLayoutToClient(clientId, playerOrder.ToArray());
+            return;
+        }
 
         if (!playerOrder.Contains(clientId))
         {
@@ -79,7 +100,7 @@ public class TurnManager : NetworkBehaviour
                 Debug.Log("[TurnManager] 人数凑齐，正式开局！下发 UI 座位表！");
 
                 // 1. 把顺序转成数组发给所有客户端去构建 UI
-                InitializeUIClientRpc(playerOrder.ToArray());
+                BroadcastLayout(playerOrder.ToArray());
 
                 // 2. 顺便让 A 组的银行或者市场发牌机也在这里完成初始化（如果有的话）
             }
@@ -104,12 +125,40 @@ public class TurnManager : NetworkBehaviour
     }
     // 全服广播：强行唤醒客户端的 UI 管家
     [ClientRpc]
-    private void InitializeUIClientRpc(ulong[] orderArray)
+    private void InitializeUIClientRpc(ulong[] orderArray, ClientRpcParams clientRpcParams = default)
     {
-        if (PlayerUIManager.Instance != null)
+        pendingUiOrder = orderArray;
+        pendingUiLayout = true;
+        pendingUiDeadline = Time.unscaledTime + 8f;
+        TryBuildClientLayout();
+    }
+
+    private void BroadcastLayout(ulong[] orderArray)
+    {
+        InitializeUIClientRpc(orderArray);
+    }
+
+    private void SendLayoutToClient(ulong clientId, ulong[] orderArray)
+    {
+        ClientRpcParams target = new ClientRpcParams
         {
-            PlayerUIManager.Instance.BuildLayout(new List<ulong>(orderArray));
-        }
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { clientId }
+            }
+        };
+
+        InitializeUIClientRpc(orderArray, target);
+    }
+
+    private void TryBuildClientLayout()
+    {
+        if (!pendingUiLayout || pendingUiOrder == null) return;
+        if (PlayerUIManager.Instance == null) return;
+
+        PlayerUIManager.Instance.BuildLayout(new List<ulong>(pendingUiOrder));
+        pendingUiLayout = false;
+        Debug.Log("[TurnManager] 客户端 UI 座位表构建完成。");
     }
 
     // ==========================================

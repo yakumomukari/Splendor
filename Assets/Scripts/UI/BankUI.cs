@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Unity.Netcode;
 
 public class BankUI : MonoBehaviour
 {
@@ -18,11 +19,86 @@ public class BankUI : MonoBehaviour
     private int[] selectedTokens = new int[5];
     // 缓存的银行当前存量，用于合法性校验
     private int[] currentBankTokens = new int[5];
+    private bool isBound;
+    private bool pendingRequest;
 
-    private void Start()
+    private void OnEnable()
     {
         // 初始化刷新暂存区及按钮默认状态
         ClearSelection();
+        TryBindBankEvents();
+        RefreshFromBankManager();
+    }
+
+    private void Update()
+    {
+        if (!isBound)
+        {
+            TryBindBankEvents();
+            RefreshFromBankManager();
+        }
+    }
+
+    private void OnDisable()
+    {
+        UnbindBankEvents();
+    }
+
+    private void TryBindBankEvents()
+    {
+        if (isBound) return;
+        if (BankManager.Instance == null) return;
+
+        BankManager.Instance.DiamondCount.OnValueChanged += OnBankChanged;
+        BankManager.Instance.SapphireCount.OnValueChanged += OnBankChanged;
+        BankManager.Instance.EmeraldCount.OnValueChanged += OnBankChanged;
+        BankManager.Instance.RubyCount.OnValueChanged += OnBankChanged;
+        BankManager.Instance.OnyxCount.OnValueChanged += OnBankChanged;
+        BankManager.Instance.GoldCount.OnValueChanged += OnBankChanged;
+        isBound = true;
+    }
+
+    private void UnbindBankEvents()
+    {
+        if (!isBound) return;
+        if (BankManager.Instance == null) return;
+
+        BankManager.Instance.DiamondCount.OnValueChanged -= OnBankChanged;
+        BankManager.Instance.SapphireCount.OnValueChanged -= OnBankChanged;
+        BankManager.Instance.EmeraldCount.OnValueChanged -= OnBankChanged;
+        BankManager.Instance.RubyCount.OnValueChanged -= OnBankChanged;
+        BankManager.Instance.OnyxCount.OnValueChanged -= OnBankChanged;
+        BankManager.Instance.GoldCount.OnValueChanged -= OnBankChanged;
+        isBound = false;
+    }
+
+    private void OnBankChanged(int _, int __)
+    {
+        if (pendingRequest)
+        {
+            pendingRequest = false;
+            ClearSelection();
+            return;
+        }
+
+        RefreshFromBankManager();
+    }
+
+    private void RefreshFromBankManager()
+    {
+        if (BankManager.Instance == null) return;
+
+        // 顺序统一为: 白,蓝,绿,红,黑
+        int[] remaining = new int[5]
+        {
+            BankManager.Instance.DiamondCount.Value,
+            BankManager.Instance.SapphireCount.Value,
+            BankManager.Instance.EmeraldCount.Value,
+            BankManager.Instance.RubyCount.Value,
+            BankManager.Instance.OnyxCount.Value
+        };
+
+        UpdateBank(remaining, BankManager.Instance.GoldCount.Value);
     }
 
     /// <summary>
@@ -88,11 +164,65 @@ public class BankUI : MonoBehaviour
     /// </summary>
     public void ConfirmTakeTokens()
     {
-        // 发送给网络层或逻辑核心进行校验与扣费
-        GameEvents.OnTakeTokensReq?.Invoke(selectedTokens);
+        int total = 0;
+        for (int i = 0; i < selectedTokens.Length; i++) total += selectedTokens[i];
+        if (total <= 0)
+        {
+            Debug.LogWarning("[BankUI] 你还没选择任何代币。");
+            return;
+        }
 
-        // 重置暂存区，避免重复点击
-        ClearSelection();
+        if (TurnManager.Instance != null && NetworkManager.Singleton != null)
+        {
+            ulong activeId = TurnManager.Instance.CurrentActivePlayerId.Value;
+            ulong localId = NetworkManager.Singleton.LocalClientId;
+            if (activeId != localId)
+            {
+                Debug.LogWarning($"[BankUI] 不是你的回合。当前回合玩家={activeId}，你是={localId}");
+                return;
+            }
+        }
+
+        Debug.Log($"[BankUI] ConfirmTakeTokens: W={selectedTokens[0]} B={selectedTokens[1]} G={selectedTokens[2]} R={selectedTokens[3]} K={selectedTokens[4]}");
+
+        bool sent = false;
+
+        // 先走事件链(若本地Player已订阅)
+        if (GameEvents.OnTakeTokensReq != null)
+        {
+            GameEvents.OnTakeTokensReq.Invoke(new int[]
+            {
+                selectedTokens[0],
+                selectedTokens[1],
+                selectedTokens[2],
+                selectedTokens[3],
+                selectedTokens[4]
+            });
+            sent = true;
+        }
+
+        // 兜底：事件链未就绪时，直接向 BankManager 发 RPC
+        if (!sent && BankManager.Instance != null)
+        {
+            BankManager.Instance.RequestTakeTokensServerRpc(
+                selectedTokens[2], // green -> em
+                selectedTokens[1], // blue  -> sa
+                selectedTokens[3], // red   -> ru
+                selectedTokens[0], // white -> di
+                selectedTokens[4]  // black -> on
+            );
+            sent = true;
+            Debug.Log("[BankUI] 事件链未订阅，已直接走 BankManager RPC 兜底。");
+        }
+
+        if (!sent)
+        {
+            Debug.LogWarning("[BankUI] 拿币请求未发送：未找到可用事件链或 BankManager。");
+            return;
+        }
+
+        // 不立即清空，等待服务器库存同步后再清空，避免“点完秒回默认”的错觉。
+        pendingRequest = true;
     }
 
     /// <summary>

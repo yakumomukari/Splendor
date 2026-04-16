@@ -78,6 +78,7 @@ public class Player : NetworkBehaviour
 
     // 缓存当前实体绑定的 UI 面板引用
     private PlayerPanel myBoundUI;
+    private bool uiEventsBound;
 
     // ==========================================
     // 逻辑判定
@@ -104,10 +105,7 @@ public class Player : NetworkBehaviour
             myBoundUI = PlayerUIManager.Instance.GetPanelByClientId(OwnerClientId);
             if (myBoundUI != null)
             {
-                // 把委托抽出来方便后面 -= 注销防内存泄露
-                Tokens.OnValueChanged += OnTokensChanged;
-                Discounts.OnValueChanged += OnDiscountsChanged;
-                Score.OnValueChanged += OnScoreChanged;
+                BindUiEvents();
 
                 // 首次推数据，确保中途加入的玩家也能看到正确数值
                 RefreshUI();
@@ -138,9 +136,7 @@ public class Player : NetworkBehaviour
         // 拔掉数据线防泄露
         if (myBoundUI != null)
         {
-            Tokens.OnValueChanged -= OnTokensChanged;
-            Discounts.OnValueChanged -= OnDiscountsChanged;
-            Score.OnValueChanged -= OnScoreChanged;
+            UnbindUiEvents();
 
             // 物理销毁：如果有人退房了，顺手把他留在屏幕上的 UI 扬了 (除了自己)
             if (!IsOwner) Destroy(myBoundUI.gameObject);
@@ -430,17 +426,36 @@ public class Player : NetworkBehaviour
     // 专门给 PlayerUIManager 暴力的接线口
     public void BindUI(PlayerPanel panel)
     {
+        UnbindUiEvents();
         myBoundUI = panel;
         if (myBoundUI != null)
         {
             // 绑上数据线
-            Tokens.OnValueChanged += OnTokensChanged;
-            Discounts.OnValueChanged += OnDiscountsChanged;
-            Score.OnValueChanged += OnScoreChanged;
+            BindUiEvents();
 
             // 立刻推一次数据，防止 UI 是空的
             RefreshUI();
             Debug.Log($"[Player] 玩家 {OwnerClientId} 成功补挂并刷新 UI 面板！");
         }
+    }
+
+    private void BindUiEvents()
+    {
+        if (uiEventsBound) return;
+
+        Tokens.OnValueChanged += OnTokensChanged;
+        Discounts.OnValueChanged += OnDiscountsChanged;
+        Score.OnValueChanged += OnScoreChanged;
+        uiEventsBound = true;
+    }
+
+    private void UnbindUiEvents()
+    {
+        if (!uiEventsBound) return;
+
+        Tokens.OnValueChanged -= OnTokensChanged;
+        Discounts.OnValueChanged -= OnDiscountsChanged;
+        Score.OnValueChanged -= OnScoreChanged;
+        uiEventsBound = false;
     }
 }

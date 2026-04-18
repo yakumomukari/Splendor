@@ -21,7 +21,14 @@ public class BankUI : MonoBehaviour
     private int[] currentBankTokens = new int[5];
     private bool isBound;
     // private bool pendingRequest;
-
+    // 在 BankUI 类的最开头加上这句：
+    public static BankUI Instance { get; private set; }
+    // 如果你之前没写 Awake，加上它：
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
     private void OnEnable()
     {
         // 初始化刷新暂存区及按钮默认状态
@@ -57,7 +64,17 @@ public class BankUI : MonoBehaviour
         BankManager.Instance.GoldCount.OnValueChanged += OnBankChanged;
         isBound = true;
     }
-
+    // ==========================================
+    // 【新增】：暴露出暂存区的状态查询接口
+    // ==========================================
+    public bool HasPendingDraft()
+    {
+        for (int i = 0; i < selectedTokens.Length; i++)
+        {
+            if (selectedTokens[i] > 0) return true;
+        }
+        return false;
+    }
     private void UnbindBankEvents()
     {
         if (!isBound) return;

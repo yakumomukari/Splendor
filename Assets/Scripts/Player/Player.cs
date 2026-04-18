@@ -326,24 +326,44 @@ public class Player : NetworkBehaviour
     private void ReserveCardServerRpc(int cardId, ServerRpcParams rpcParams = default)
     {
         ulong senderId = rpcParams.Receive.SenderClientId;
-        if (TurnManager.Instance.IsWaitingForReturn.Value || TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
+        if (TurnManager.Instance.CurrentActivePlayerId.Value != senderId) return;
 
         var currentReserved = Reserved.Value;
         if (currentReserved.TryAddCard(cardId))
         {
             Reserved.Value = currentReserved;
-            if (BankManager.Instance.TryTakeGoldToken())
+
+            // ==========================================
+            // 【核心补丁】：适配“无归还UI”的万能黄金上限判定
+            // ==========================================
+            var t = Tokens.Value;
+            int total = t.White + t.Blue + t.Green + t.Red + t.Black + t.Gold;
+
+            if (total < 10)
             {
-                var t = Tokens.Value;
-                t.Gold++;
-                Tokens.Value = t;
+                if (BankManager.Instance.TryTakeGoldToken())
+                {
+                    t.Gold++;
+                    Tokens.Value = t;
+                    Debug.Log($"[Player-Server] 玩家 {senderId} 预约卡牌 {cardId}，获得 1 黄金。");
+                }
             }
+            else
+            {
+                // 如果已经满 10 个，允许占坑位，但绝不发钱，并给个弹窗提示
+                Debug.Log($"[Player-Server] 玩家 {senderId} 代币已满 10 个，预约卡牌无法获得黄金。");
+                ShowTakeTokenFailedClientRpc("代币已达10个上限，本次预约无法获得黄金！");
+            }
+
+            // 告诉市场把这张卡删了
             GameEvents.OnServerCardBought?.Invoke(cardId);
-            TryEndTurn();
+
+            // 直接切回合
+            TurnManager.Instance.GoToNextTurn();
         }
         else
         {
-            GameEvents.OnShowWarningMsg?.Invoke("预约位已满！");
+            ShowBuyFailedClientRpc("预约位已满（最多3张）！");
         }
     }
 

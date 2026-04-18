@@ -562,6 +562,7 @@ GameObject:
   - component: {fileID: 8225536643856131531}
   - component: {fileID: 1917450494866532719}
   - component: {fileID: 2433734955145087554}
+  - component: {fileID: 1474832463190506462}
   m_Layer: 5
   m_Name: CardPrefab
   m_TagString: Untagged
@@ -615,7 +616,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 0.3207547, g: 0.18912424, b: 0.18912424, a: 1}
-  m_RaycastTarget: 0
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -651,6 +652,18 @@ MonoBehaviour:
   costGreenText: {fileID: 1348966320171704188}
   costRedText: {fileID: 1030884095154736873}
   costBlackText: {fileID: 2226173579320297911}
+--- !u!114 &1474832463190506462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5032881578050606742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5ba6a604b95947a4b95598c759c7bb32, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &5268628019843627928
 GameObject:
   m_ObjectHideFlags: 0

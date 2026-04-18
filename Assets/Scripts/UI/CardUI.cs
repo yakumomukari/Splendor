@@ -87,10 +87,16 @@ public class CardUI : MonoBehaviour
     /// <summary>
     /// 购买按钮点击事件（绑定到预制体的 Button 的 OnClick 上）
     /// </summary>
-    public void OnBuyClick()
+    public void OnBuyClicked()
     {
-        // UI 只负责“发射人的意图”，不用管现在是不是他的回合，也不去扣自己的钱
-        // 这一步彻底实现 UI 和 核心网络与逻辑的解耦！
+        // 冲突覆盖：点击买卡时，如果购物车里有半成品的代币，直接掀翻
+        if (BankUI.Instance != null && BankUI.Instance.HasPendingDraft())
+        {
+            BankUI.Instance.ClearSelection();
+            Debug.Log("[CardUI] 玩家点击购买卡牌，已自动清空代币暂存区。");
+        }
+
+        // 发射你的买卡事件
         GameEvents.OnBuyCardReq?.Invoke(currentCardId);
     }
 }

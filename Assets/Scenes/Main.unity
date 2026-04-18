@@ -1228,7 +1228,7 @@ PrefabInstance:
     - target: {fileID: 4657000481117733243, guid: b350039f7512ea441b64448bb9150fb9, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_Target
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1904867704}
     - target: {fileID: 4657000481117733243, guid: b350039f7512ea441b64448bb9150fb9, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_CallState
       value: 2
@@ -1432,6 +1432,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Image
       objectReference: {fileID: 0}
+    - target: {fileID: 1723500385305641740, guid: d127e3518320194469a50a5c86fc9cdd, type: 3}
+      propertyPath: confirmReserveButton
+      value: 
+      objectReference: {fileID: 1320227484}
     - target: {fileID: 6845851804884563907, guid: d127e3518320194469a50a5c86fc9cdd, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5
@@ -2014,6 +2018,17 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 6845851804884563907, guid: d127e3518320194469a50a5c86fc9cdd, type: 3}
   m_PrefabInstance: {fileID: 1413777877}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1904867704 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1723500385305641740, guid: d127e3518320194469a50a5c86fc9cdd, type: 3}
+  m_PrefabInstance: {fileID: 1413777877}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 552f53b5823009749b0d7b3e4f59d7bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1917700443
 GameObject:
   m_ObjectHideFlags: 0

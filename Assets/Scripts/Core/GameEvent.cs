@@ -1,4 +1,6 @@
 using System;
+using UnityEngine;
+using Unity;
 
 // 璀璨宝石全局事件总线 (纯静态，绝对不要挂在物体上)
 // 团队开发铁律：B(UI层) 只准调用 Invoke() 发射事件，A和C(网络与逻辑层) 只准绑定 += 和 -= 监听事件
@@ -58,4 +60,6 @@ public static class GameEvents
     // 参数：需要还的数量
     public static Action<int> OnClientMustReturnTokens;
     public static Action<ulong, int> OnGameEnded;
+    // 参数：卡牌ID，买主ID，卡牌在屏幕上的起始世界坐标 (防服务器删卡太快找不到)
+    public static Action<int, ulong, Vector3> OnPlayCardFlightFX;
 }

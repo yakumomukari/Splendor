@@ -115,14 +115,64 @@ public class CardUI : MonoBehaviour
     /// </summary>
     public void OnBuyClicked()
     {
-        // 冲突覆盖：点击买卡时，如果购物车里有半成品的代币，直接掀翻
+        // ==========================================
+        // 1. 极其严格的本地预判锁 (双重防线)
+        // ==========================================
+        if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
+        {
+            ulong localId = Unity.Netcode.NetworkManager.Singleton.LocalClientId;
+
+            // 锁1：不是你的回合？直接把手打断。
+            if (TurnManager.Instance != null && TurnManager.Instance.CurrentActivePlayerId.Value != localId)
+            {
+                Debug.LogWarning("[CardUI] 还没轮到你买卡！拦截特效与请求。");
+                GameEvents.OnShowWarningMsg?.Invoke("还没轮到你！");
+                return;
+            }
+
+            // 锁2：买不起？直接打断。(拿到本地玩家实体查账)
+            var localObj = Unity.Netcode.NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject();
+            if (localObj != null)
+            {
+                Player p = localObj.GetComponent<Player>();
+                // 注意：这里需要你的 GlobalCardDatabase 提供单例访问
+                if (p != null && GlobalCardDatabase.Instance != null)
+                {
+                    CardSO data = GlobalCardDatabase.Instance.GetCard(currentCardId);
+                    if (data != null)
+                    {
+                        int[] cardCosts = new int[] { data.costWhite, data.costBlue, data.costGreen, data.costRed, data.costBlack };
+                        if (!p.CanAfford(cardCosts))
+                        {
+                            Debug.LogWarning("[CardUI] 资产不足！拦截特效与请求。");
+                            // 核心：买不起直接 return，绝对不播动画，也不发 RPC！
+                            GameEvents.OnShowWarningMsg?.Invoke("你买不起这张卡！");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 2. 冲突覆盖 (掀翻购物车)
+        // ==========================================
         if (BankUI.Instance != null && BankUI.Instance.HasPendingDraft())
         {
             BankUI.Instance.ClearSelection();
             Debug.Log("[CardUI] 玩家点击购买卡牌，已自动清空代币暂存区。");
         }
 
-        // 发射你的买卡事件
+        // ==========================================
+        // 3. 校验全部通过，正式开枪发射！
+        // ==========================================
         GameEvents.OnBuyCardReq?.Invoke(currentCardId);
+
+        // 走到这一步，说明本地校验 100% 能买成，自信地播放前摇动画！
+        if (Unity.Netcode.NetworkManager.Singleton != null)
+        {
+            ulong localId = Unity.Netcode.NetworkManager.Singleton.LocalClientId;
+            GameEvents.OnPlayCardFlightFX?.Invoke(currentCardId, localId, transform.position);
+        }
     }
 }

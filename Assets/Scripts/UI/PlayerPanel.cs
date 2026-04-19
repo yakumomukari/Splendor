@@ -88,4 +88,17 @@ public class PlayerPanel : MonoBehaviour
             scoreText.text = score.ToString();
         }
     }
+    // ==========================================
+    // 【新增】：给飞行特效暴露靶心坐标
+    // ==========================================
+    public Transform GetDiscountSlotTransform(GemType gemType)
+    {
+        // 假设 discountTexts 的顺序和 GemType 枚举严格对应 (白, 蓝, 绿, 红, 黑)
+        int index = (int)gemType;
+        if (index >= 0 && index < discountTexts.Length && discountTexts[index] != null)
+        {
+            return discountTexts[index].transform;
+        }
+        return transform; // 兜底：如果找不到对应的槽位，直接飞到面板正中心
+    }
 }

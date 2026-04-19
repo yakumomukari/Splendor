@@ -9,7 +9,8 @@ public class PlayerUIManager : MonoBehaviour
     [Header("UI 预制体 (找 C 组要这三个)")]
     public PlayerPanel localPlayerPanelPrefab;       // 主面板 (横版，尺寸大，图里玩家1)
     public PlayerPanel opponentHorizontalPrefab;     // 对手顶部面板 (横版，尺寸小，图里玩家2/3)
-    public PlayerPanel opponentVerticalPrefab;       // 对手侧边面板 (竖版，尺寸小，图里玩家4/5)
+    public PlayerPanel opponentRightPrefab;       // 对手侧边面板 (竖版，尺寸小，图里玩家4/5)
+    public PlayerPanel opponentLeftPrefab;          // 观众面板 (横版，尺寸小，图里玩家6+)
 
     [Header("座位锚点")]
     public Transform anchorBottom;   // 绝对 0 号位: 玩家自己
@@ -55,9 +56,13 @@ public class PlayerUIManager : MonoBehaviour
             {
                 prefabToUse = localPlayerPanelPrefab; // 自己永远用底部的豪华大号横版
             }
-            else if (targetAnchor == anchorLeft || targetAnchor == anchorRight)
+            else if (targetAnchor == anchorRight)
             {
-                prefabToUse = opponentVerticalPrefab; // 左右两侧用【竖版】
+                prefabToUse = opponentRightPrefab; // 左右两侧用【竖版】
+            }
+            else if (targetAnchor == anchorLeft)
+            {
+                prefabToUse = opponentLeftPrefab; // 左右两侧用【竖版】
             }
             else
             {

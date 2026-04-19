@@ -42,7 +42,18 @@ public class NobleItemUI : MonoBehaviour
         }
         else
         {
-            t.gameObject.SetActive(false); // 隐藏不需要的宝石颜色，保持 UI 干净
+            if (t != null)
+            {
+                Transform parent = t.transform.parent;
+                if (parent != null)
+                {
+                    parent.gameObject.SetActive(false); // 隐藏上一级父物体
+                }
+                else
+                {
+                    t.gameObject.SetActive(false); // 没有父物体时退化为隐藏自己
+                }
+            }
         }
     }
 }

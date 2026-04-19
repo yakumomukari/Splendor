@@ -8,7 +8,7 @@ public class CardUI : MonoBehaviour
     public TextMeshProUGUI pointsText;         // 威望分数文本
     public TextMeshProUGUI bonusGemText;       // 奖励宝石类型的表现（实际开发中可能是 Image）
     public GameObject lockOverlay;             // 半透明遮罩层
-
+    public Image GemBg;
     [Header("Cost UI Elements")]
     public TextMeshProUGUI costWhiteText;      // 可以根据实际情况考虑用数组结构
     public TextMeshProUGUI costBlueText;
@@ -40,7 +40,23 @@ public class CardUI : MonoBehaviour
         // 2. 设置宝石奖励 (如果是图片可相应替换 Sprite)
         if (bonusGemText != null)
         {
+            if (GemBg != null)
+            {
+                TMPColorTool.SetImgColor(GemBg, data.bonusGem switch
+                {
+                    GemType.White => "#FFFFFF",
+                    GemType.Blue => "#146FB4",
+                    GemType.Green => "#24980C",
+                    GemType.Red => "#DC0000",
+                    GemType.Black => "#282828",
+                    _ => "#FFFFFF"
+                });
+            }
             bonusGemText.text = data.bonusGem.ToString();
+            if (data.bonusGem.ToString() == "White")
+            {
+                TMPColorTool.SetTxtColor(bonusGemText, "#824016");
+            }
         }
 
         // 3. 设置花费 (为0的花费通常在UI上会隐藏起来)
@@ -62,8 +78,18 @@ public class CardUI : MonoBehaviour
         }
         else
         {
-            // 费用为0时隐藏该UI
-            uiText.gameObject.SetActive(false);
+            if (uiText != null)
+            {
+                Transform parent = uiText.transform.parent;
+                if (parent != null)
+                {
+                    parent.gameObject.SetActive(false); // 隐藏上一级父物体
+                }
+                else
+                {
+                    uiText.gameObject.SetActive(false); // 没有父物体时退化为隐藏自己
+                }
+            }
         }
     }
 

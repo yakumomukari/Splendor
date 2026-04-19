@@ -786,7 +786,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 2433734955145087554}
         m_TargetAssemblyTypeName: CardUI, Assembly-CSharp
-        m_MethodName: OnBuyClick
+        m_MethodName: OnBuyClicked
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

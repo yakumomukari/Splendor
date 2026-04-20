@@ -5,26 +5,16 @@ public class ServerAutoStart : MonoBehaviour
 {
     void Start()
     {
-        // 1. 如果是在编辑器里点 Play
-        if (Application.isEditor)
-        {
-            Debug.Log("[ServerAutoStart] 检测到处于编辑器模式，跳过自动启动 Server。");
-            // 如果你想让它自动连 Linux，可以写下一行，不想自动连就注释掉
-            // NetworkManager.Singleton.StartClient(); 
-            return; 
-        }
+        // 如果是在编辑器里点 Play，我们什么都不自动做，全手动点
+        if (Application.isEditor) return;
 
-        // 2. 如果是在 Linux 服务器上运行（非编辑器环境）
+        // 【服务器专属】只有 Dedicated Server 包才会自动执行
         #if UNITY_SERVER
-        Debug.Log("====================================");
-        Debug.Log("检测到专用服务器打包环境，正在启动 WebSocket 服务器...");
-        Debug.Log("====================================");
-
-        if (NetworkManager.Singleton != null)
-        {
-            bool ok = NetworkManager.Singleton.StartServer();
-            Debug.Log(ok ? "服务器启动成功！" : "服务器启动失败！");
-        }
+            Debug.Log("--- Linux 专用服务器启动：自动开启 StartServer ---");
+            NetworkManager.Singleton.StartServer();
         #endif
+
+        // 【玩家专属】普通 Player 包（.exe）不会自动开启任何东西
+        // 逻辑交给主菜单去触发
     }
 }
